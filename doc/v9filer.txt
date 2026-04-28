@@ -1,0 +1,216 @@
+*v9filer.txt*   A simple file explorer written in Vim9 script
+
+==============================================================================
+CONTENTS                                                    *v9filer-contents*
+
+    1. Introduction ................................. |v9filer|
+    2. Commands ..................................... |v9filer-commands|
+    3. Mappings ..................................... |v9filer-mappings|
+    4. Configuration ................................ |v9filer-config|
+    5. Breaking Changes ............................. |v9filer-breaking|
+
+==============================================================================
+1. Introduction                                                      *v9filer*
+
+v9filer is a simple file explorer plugin written in Vim9 script. It displays
+directory contents as an inline expandable tree with a header showing the
+current root path, and allows navigation and basic file operations.
+
+Two operating modes are available:
+
+embedded mode ~
+    The filer replaces the current window (like |:Explore|). Pressing <CR>
+    on a file opens it in the same window, replacing the filer.
+
+toggle mode ~
+    The filer opens as a left-side vertical split (sidebar). Pressing <CR>
+    on a file opens it in an adjacent window, leaving the sidebar open.
+    A tab-local variable tracks the sidebar buffer so it can be toggled.
+
+Directories are listed first (with a trailing `/`), followed by files.
+Hidden files (dotfiles) are shown by default.
+
+The header shows the current root path compactly, using `~` for the home
+directory when applicable.
+
+File entries may include a suffix indicating their type:
+    `@`  symbolic link
+    `*`  executable file
+
+The filer highlights the header, directories, suffixes, hidden entries, help
+text, and empty directory placeholders by default. Optional icons can be added
+before entry names when a font with the desired glyphs is available.
+
+==============================================================================
+2. Commands                                                  *v9filer-commands*
+
+:V9Filer [dir]                                                      *:V9Filer*
+    Open the filer in embedded mode in the current window. If [dir] is
+    omitted, the current working directory is used.
+
+:V9Filer -toggle [dir]
+    Open the filer as a toggle sidebar. If a sidebar is already open in
+    the current tab it is closed (toggle). If [dir] is omitted, the
+    current working directory is used. The `-toggle` flag may appear
+    before or after the directory argument.
+
+:Filer [...]                                                          *:Filer*
+    Alias for |:V9Filer|. Accepts the same arguments.
+
+:V9FilerReveal                                                *:V9FilerReveal*
+    Expand ancestors of the current file in the toggle sidebar and move the
+    cursor to the entry. Does nothing if no toggle sidebar is open in the
+    current tab or if the current file is outside the sidebar's root.
+
+==============================================================================
+3. Mappings                                                  *v9filer-mappings*
+
+Global mappings ~
+
+Unless |g:v9filer_no_default_mappings| is set, the following mappings are
+defined globally:
+
+    <Leader>ee  Open the toggle sidebar in the current working directory.
+    <Leader>eE  Open embedded filer in the current working directory.
+    <Leader>et  Open the toggle sidebar in the directory of the current file.
+    <Leader>eT  Open embedded filer in the directory of the current file.
+    <Leader>ef  Reveal the current file in the toggle sidebar.
+
+Buffer-local mappings ~
+
+The following mappings are available in the filer buffer.
+
+Navigation ~
+
+    <CR>    On a directory: toggle expand / collapse.
+            On a file (embedded mode): open it in the current window.
+            On a file (toggle mode): open it in an adjacent window.
+
+    l       Change the root to the directory under the cursor.
+
+    -       Go to the parent directory.
+    <BS>    Go to the parent directory.
+
+    v       Open the file under the cursor in a vertical split.
+    s       Open the file under the cursor in a horizontal split.
+
+File operations ~
+
+    D       Delete the file or directory under the cursor. A confirmation
+            prompt is shown before deletion.
+
+    r       Rename the file or directory under the cursor. An input prompt
+            is shown for the new name.
+
+    %       Create a new file or directory in the current root. An input
+            prompt is shown for the name. A trailing `/` creates a directory.
+
+Other ~
+
+    .       Toggle display of hidden files (dotfiles).
+
+    R       Refresh the directory listing.
+
+    C       Change the current window's working directory to the displayed
+            root directory (equivalent to |:lcd|).
+
+    y       Copy the path under the cursor to the `+` and `"` registers.
+
+    ?       Toggle the quick-help header at the top of the buffer.
+
+    q       Close the filer.
+            Embedded mode: return to the previous buffer (or open a new
+            empty buffer if no previous buffer exists).
+            Toggle mode: close the sidebar window.
+
+==============================================================================
+4. Configuration                                              *v9filer-config*
+
+*g:v9filer_show_hidden*
+    When set to |true|, hidden files (dotfiles) are shown by default.
+    Default: true >
+        let g:v9filer_show_hidden = false
+<
+
+*g:v9filer_width*
+    Width (in columns) of the toggle sidebar window.
+    Default: 30 >
+        let g:v9filer_width = 40
+<
+
+*g:v9filer_auto_reveal*
+    When set to |true|, the toggle sidebar automatically reveals the current
+    file when switching buffers.
+    Default: false >
+        let g:v9filer_auto_reveal = true
+<
+
+*g:v9filer_use_colors*
+    When set to |false|, v9filer does not apply its buffer-local display
+    highlights.
+    Default: true >
+        let g:v9filer_use_colors = false
+<
+
+*g:v9filer_icons*
+    When set to |true|, v9filer adds icons before entry names. The default
+    icon set uses Unicode glyphs and may require a compatible font.
+    Default: false >
+        let g:v9filer_icons = true
+<
+
+*g:v9filer_icon_map*
+    Dictionary used to override icons when |g:v9filer_icons| is enabled.
+    Supported keys are `directory_open`, `directory_closed`, `file`,
+    `symlink`, and `executable`. >
+        let g:v9filer_icon_map = {
+              \ 'directory_open': 'v ',
+              \ 'directory_closed': '> ',
+              \ 'file': '- ',
+              \ 'symlink': '@ ',
+              \ 'executable': '* ',
+              \ }
+<
+
+Highlight groups ~
+
+The default highlight links are:
+
+    V9FilerBreadcrumb  -> Title
+    V9FilerDirectory   -> Directory
+    V9FilerFile        -> Normal
+    V9FilerMarker      -> Special
+    V9FilerSymlink     -> Special
+    V9FilerExecutable  -> Statement
+    V9FilerHidden      -> Comment
+    V9FilerHelp        -> Comment
+    V9FilerEmpty       -> Comment
+
+*g:v9filer_no_default_mappings*
+    When set to |true|, the default global mappings are not defined, allowing
+    you to set your own. >
+        let g:v9filer_no_default_mappings = true
+        nnoremap <silent> <F3> <Cmd>V9Filer -toggle<CR>
+        nnoremap <silent> <F4> <Cmd>V9Filer<CR>
+<
+
+==============================================================================
+5. Breaking Changes                                          *v9filer-breaking*
+
+Compared to earlier releases:
+
+- `:V9Filer` now opens the filer in embedded mode (current window) instead of
+  toggling a sidebar. Use `:V9Filer -toggle` for the sidebar.
+
+- `<Leader>ee` and `<Leader>eE` have been reassigned. `<Leader>ee` is now the
+  toggle sidebar and `<Leader>eE` is embedded. The old `<Leader>eE` behaviour
+  (toggle in `%:h`) is now `<Leader>et`.
+
+- The internal tab-local variable changed from `t:v9filer_buf` to
+  `t:v9filer_toggle_buf`.
+
+- Buffer names changed from `v9filer://<path>` to
+  `v9filer-embedded://<path>` or `v9filer-toggle://<path>`.
+
+==============================================================================
+vim:tw=78:ts=8:ft=help:norl:
