@@ -173,10 +173,21 @@ enddef
 
 def MoveToTargetWindow(): void
   var filer_win = win_getid()
-  wincmd l
-  if win_getid() == filer_win
-    rightbelow vertical new
+  var target_win = get(t:, 'v9filer_last_focus_winid', 0)
+
+  if target_win > 0 && target_win != filer_win && !IsFilerWindow(target_win)
+    if win_gotoid(target_win)
+      return
+    endif
   endif
+
+  win_gotoid(filer_win)
+  rightbelow vertical new
+enddef
+
+def IsFilerWindow(winid: number): bool
+  var win = win_id2win(winid)
+  return win > 0 && !empty(getbufvar(winbufnr(win), 'v9filer_state', {}))
 enddef
 
 def PathUnderCursor(): string

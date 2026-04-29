@@ -30,6 +30,16 @@ export def AutoReveal(): void
   endif
 enddef
 
+export def RememberFocusWindow(): void
+  if !get(t:, 'v9filer_opening_toggle', false) && !IsFilerBuffer()
+    t:v9filer_last_focus_winid = win_getid()
+  endif
+enddef
+
+def IsFilerBuffer(): bool
+  return !empty(get(b:, 'v9filer_state', {}))
+enddef
+
 def ParseArgs(args: string): dict<any>
   var parts = empty(args) ? [] : split(args)
   var toggle = false
@@ -56,6 +66,8 @@ def OpenEmbedded(root: string): void
 enddef
 
 def Toggle(root: string): void
+  RememberFocusWindow()
+
   if exists('t:v9filer_toggle_buf') && bufexists(t:v9filer_toggle_buf)
     var win = bufwinnr(t:v9filer_toggle_buf)
     if win != -1
@@ -66,8 +78,14 @@ def Toggle(root: string): void
   endif
 
   var width = get(g:, 'v9filer_width', 30)
-  topleft vertical new
+  t:v9filer_opening_toggle = true
+  try
+    topleft vertical new
+  finally
+    unlet! t:v9filer_opening_toggle
+  endtry
   execute 'vertical resize ' .. width
+  setlocal winfixwidth
   t:v9filer_toggle_buf = bufnr('%')
   SetupBuffer(root, 'toggle', 0)
 enddef

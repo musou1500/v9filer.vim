@@ -23,3 +23,8 @@ augroup v9filer_auto_reveal
   autocmd!
   autocmd BufEnter * v9filer.AutoReveal()
 augroup END
+
+augroup v9filer_focus
+  autocmd!
+  autocmd WinEnter * v9filer.RememberFocusWindow()
+augroup END

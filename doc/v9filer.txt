@@ -24,8 +24,9 @@ embedded mode ~
 
 toggle mode ~
     The filer opens as a left-side vertical split (sidebar). Pressing <CR>
-    on a file opens it in an adjacent window, leaving the sidebar open.
-    A tab-local variable tracks the sidebar buffer so it can be toggled.
+    on a file opens it in the last focused non-filer window, leaving the
+    sidebar open. A tab-local variable tracks the sidebar buffer so it can be
+    toggled.
 
 Directories are listed first (with a trailing `/`), followed by files.
 Hidden files (dotfiles) are shown by default.
@@ -84,15 +85,18 @@ Navigation ~
 
     <CR>    On a directory: toggle expand / collapse.
             On a file (embedded mode): open it in the current window.
-            On a file (toggle mode): open it in an adjacent window.
+            On a file (toggle mode): open it in the last focused non-filer
+            window.
 
     l       Change the root to the directory under the cursor.
 
     -       Go to the parent directory.
     <BS>    Go to the parent directory.
 
-    v       Open the file under the cursor in a vertical split.
-    s       Open the file under the cursor in a horizontal split.
+    v       Open the file under the cursor in a vertical split. In toggle
+            mode, split from the last focused non-filer window.
+    s       Open the file under the cursor in a horizontal split. In toggle
+            mode, split from the last focused non-filer window.
 
 File operations ~
 
@@ -133,7 +137,7 @@ Other ~
 <
 
 *g:v9filer_width*
-    Width (in columns) of the toggle sidebar window.
+    Fixed width (in columns) of the toggle sidebar window.
     Default: 30 >
         let g:v9filer_width = 40
 <
