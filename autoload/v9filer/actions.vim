@@ -24,7 +24,7 @@ export def ChangeRootUnderCursor(): void
 enddef
 
 export def GoParent(): void
-  ChangeRoot(fs.Parent(state.Get().root))
+  ChangeRoot(fs.Parent(state.Root()))
 enddef
 
 export def OpenVertical(): void
@@ -61,15 +61,13 @@ enddef
 export def CreateInRoot(): void
   var name = input('New file or directory: ')
   if !empty(name)
-    fs.Create(state.Get().root, name)
+    fs.Create(state.Root(), name)
     render.Refresh()
   endif
 enddef
 
 export def ToggleHidden(): void
-  var st = state.Get()
-  st.show_hidden = !st.show_hidden
-  state.Set(st)
+  state.ToggleHidden()
   render.Refresh()
 enddef
 
@@ -78,13 +76,13 @@ export def Refresh(): void
 enddef
 
 export def LcdRoot(): void
-  execute 'lcd ' .. fnameescape(state.Get().root)
+  execute 'lcd ' .. fnameescape(state.Root())
 enddef
 
 export def YankPath(): void
   var path = PathUnderCursor()
   if empty(path)
-    path = state.Get().root
+    path = state.Root()
   endif
   setreg('"', path)
   try
@@ -95,15 +93,12 @@ export def YankPath(): void
 enddef
 
 export def ToggleHelp(): void
-  var st = state.Get()
-  st.help = !st.help
-  state.Set(st)
+  state.ToggleHelp()
   render.Refresh()
 enddef
 
 export def Close(): void
-  var st = state.Get()
-  if get(st, 'mode', '') ==# 'toggle'
+  if state.IsToggle()
     if exists('t:v9filer_toggle_buf') && t:v9filer_toggle_buf == bufnr('%')
       unlet! t:v9filer_toggle_buf
     endif
@@ -111,7 +106,7 @@ export def Close(): void
     return
   endif
 
-  var prev_buf = get(st, 'prev_buf', 0)
+  var prev_buf = state.PreviousBuffer()
   render.ClearHighlights()
   if prev_buf > 0 && bufexists(prev_buf)
     execute 'buffer ' .. prev_buf
@@ -133,30 +128,19 @@ def OpenPath(kind: string): void
 enddef
 
 def ToggleDir(path: string): void
-  var st = state.Get()
-  var expanded = get(st, 'expanded', {})
-  if get(expanded, path, false)
-    remove(expanded, path)
-  else
-    expanded[path] = true
-  endif
-  st.expanded = expanded
-  state.Set(st)
+  state.ToggleExpanded(path)
   render.Refresh()
 enddef
 
 def ChangeRoot(path: string): void
-  var st = state.Get()
-  st.root = fs.Normalize(path)
-  st.expanded = {}
-  state.Set(st)
-  execute 'file ' .. fnameescape('v9filer-' .. st.mode .. '://' .. st.root)
+  var root = fs.Normalize(path)
+  state.SetRoot(root)
+  execute 'file ' .. fnameescape('v9filer-' .. state.Mode() .. '://' .. root)
   render.Refresh()
 enddef
 
 def OpenFile(path: string, kind: string): void
-  var st = state.Get()
-  if get(st, 'mode', '') ==# 'toggle'
+  if state.IsToggle()
     MoveToTargetWindow()
   elseif kind ==# 'edit'
     render.ClearHighlights()
@@ -191,6 +175,5 @@ def IsFilerWindow(winid: number): bool
 enddef
 
 def PathUnderCursor(): string
-  var st = state.Get()
-  return get(get(st, 'line_paths', {}), string(line('.')), '')
+  return state.PathForLine(line('.'))
 enddef

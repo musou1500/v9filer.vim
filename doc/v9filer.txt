@@ -39,8 +39,8 @@ File entries may include a suffix indicating their type:
     `*`  executable file
 
 The filer highlights the header, directories, suffixes, hidden entries, help
-text, and empty directory placeholders by default. Optional icons can be added
-before entry names when a font with the desired glyphs is available.
+text, and empty directory placeholders by default. Optional Nerd Font icons
+can be added before entry names.
 
 ==============================================================================
 2. Commands                                                  *v9filer-commands*
@@ -156,39 +156,79 @@ Other ~
         let g:v9filer_use_colors = false
 <
 
-*g:v9filer_icons*
-    When set to |true|, v9filer adds icons before entry names. The default
-    icon set uses Unicode glyphs and may require a compatible font.
+*g:v9filer_nerd_font_icons*
+    When set to |true|, Nerd Font icons are displayed before entry names.
+    A Nerd Font compatible font is required. Icons are chosen from built-in
+    filename pattern rules, plus any rules configured by
+    |g:v9filer_nerd_font_icon_rules|. When no rule matches, v9filer falls
+    back to a default icon for the entry kind: directory, symlink,
+    executable file, or regular file.
+
+    When set to |false|, Nerd Font icons are not displayed, even if custom
+    rules are configured.
+
     Default: false >
-        let g:v9filer_icons = true
+        let g:v9filer_nerd_font_icons = true
 <
 
-*g:v9filer_icon_map*
-    Dictionary used to override icons when |g:v9filer_icons| is enabled.
-    Supported keys are `directory_open`, `directory_closed`, `file`,
-    `symlink`, and `executable`. >
-        let g:v9filer_icon_map = {
-              \ 'directory_open': 'v ',
-              \ 'directory_closed': '> ',
-              \ 'file': '- ',
-              \ 'symlink': '@ ',
-              \ 'executable': '* ',
-              \ }
+*g:v9filer_nerd_font_icon_rules*
+    Defines custom Nerd Font icon rules. This setting does not enable icon
+    display by itself; use |g:v9filer_nerd_font_icons| for that.
+
+    Custom rules are checked from top to bottom, and the first matching rule
+    is used. If no custom rule matches, v9filer checks built-in filename
+    pattern rules. If no rule matches, v9filer falls back to the
+    default icon for the entry kind. Rule conditions are combined with AND.
+
+    Supported condition keys are `name_pattern`, `is_dir`, `is_symlink`, and
+    `is_executable`. The `name_pattern` condition is a Vim regular expression
+    matched case-sensitively against the entry name, not the full path. Use a
+    `color` value to change colors for specific name patterns.
+
+    Default: [] >
+        let g:v9filer_nerd_font_icons = true
+        let g:v9filer_nerd_font_icon_rules = [
+              \ {
+              \   'text': ' ',
+              \   'color': '#6D8086',
+              \   'when': {
+              \     'name_pattern': '\.conf$',
+              \     'is_dir': false,
+              \   },
+              \ },
+              \ {
+              \   'text': ' ',
+              \   'color': '#F14E32',
+              \   'when': {
+              \     'name_pattern': '\v^(\.gitignore|\.gitattributes)$',
+              \   },
+              \ },
+              \ ]
 <
 
 Highlight groups ~
 
 The default highlight links are:
 
-    V9FilerBreadcrumb  -> Title
-    V9FilerDirectory   -> Directory
-    V9FilerFile        -> Normal
-    V9FilerMarker      -> Special
-    V9FilerSymlink     -> Special
-    V9FilerExecutable  -> Statement
-    V9FilerHidden      -> Comment
-    V9FilerHelp        -> Comment
-    V9FilerEmpty       -> Comment
+    V9FilerBreadcrumb      -> Title
+    V9FilerDirectory       -> Directory
+    V9FilerFile            -> Normal
+    V9FilerMarker          -> Special
+    V9FilerIconDirectory   -> Directory
+    V9FilerIconFile        -> Normal
+    V9FilerIconExecutable  -> Statement
+    V9FilerIconSymlink     -> Special
+    V9FilerSymlink         -> Special
+    V9FilerExecutable      -> Statement
+    V9FilerHidden          -> Comment
+    V9FilerHelp            -> Comment
+    V9FilerEmpty           -> Comment
+
+When |g:v9filer_nerd_font_icons| is enabled, icons are highlighted by entry
+kind by default. Built-in rules, fallback icons, and
+|g:v9filer_nerd_font_icon_rules| may set `color` directly. v9filer creates
+internal highlight groups per color value, so icon glyph selection and the
+public highlight interface do not grow for every filename or extension.
 
 *g:v9filer_no_default_mappings*
     When set to |true|, the default global mappings are not defined, allowing
@@ -215,6 +255,24 @@ Compared to earlier releases:
 
 - Buffer names changed from `v9filer://<path>` to
   `v9filer-embedded://<path>` or `v9filer-toggle://<path>`.
+
+- `g:v9filer_icons` and `g:v9filer_icon_map` were removed. Use
+  `g:v9filer_nerd_font_icons` to enable the built-in Nerd Font icon set.
+
+- `g:v9filer_nerd_font_icons` no longer accepts custom rule lists. Use
+  `g:v9filer_nerd_font_icon_rules` for rule configuration.
+
+- `g:v9filer_nerd_font_icon_colors` was removed. Use custom rules in
+  `g:v9filer_nerd_font_icon_rules` with a `color` value for name-pattern
+  specific icon colors.
+
+- `name_lc` was removed from Nerd Font icon rule conditions. Use
+  `name_pattern` and list each filename variant explicitly when different
+  cases should match.
+
+- `name`, `extension`, `path`, `path_glob`, and `path_pattern` were removed
+  from Nerd Font icon rule conditions. Use `name_pattern` to match entry
+  names with a Vim regular expression.
 
 ==============================================================================
 vim:tw=78:ts=8:ft=help:norl:

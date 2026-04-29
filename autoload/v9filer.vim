@@ -37,7 +37,7 @@ export def RememberFocusWindow(): void
 enddef
 
 def IsFilerBuffer(): bool
-  return !empty(get(b:, 'v9filer_state', {}))
+  return state.Has()
 enddef
 
 def ParseArgs(args: string): dict<any>
@@ -103,7 +103,7 @@ def SetupBuffer(root: string, mode: string, prev_buf: number): void
   setlocal foldcolumn=0
   setlocal nomodifiable
 
-  b:v9filer_state = state.New(root, mode, prev_buf)
+  state.Set(state.New(root, mode, prev_buf))
   DefineBufferMappings()
   render.Refresh()
 enddef
@@ -144,18 +144,13 @@ def Reveal(silent: bool): void
 
   var current_win = win_getid()
   win_gotoid(win_getid(filer_win))
-  var st = state.Get()
-  if empty(st) || !fs.IsUnder(target, st.root)
+  var root = state.Root()
+  if !state.Has() || !fs.IsUnder(target, root)
     win_gotoid(current_win)
     return
   endif
 
-  var expanded = get(st, 'expanded', {})
-  for dir in fs.Ancestors(target, st.root)
-    expanded[dir] = true
-  endfor
-  st.expanded = expanded
-  state.Set(st)
+  state.ExpandPaths(fs.Ancestors(target, root))
   render.Refresh()
   MoveCursorToPath(target)
   if !silent
@@ -165,10 +160,10 @@ def Reveal(silent: bool): void
 enddef
 
 def MoveCursorToPath(path: string): void
-  var st = state.Get()
-  for key in keys(st.line_paths)
-    if st.line_paths[key] ==# path
-      cursor(str2nr(key), 1)
+  var line_count = line('$')
+  for line_number in range(1, line_count)
+    if state.PathForLine(line_number) ==# path
+      cursor(line_number, 1)
       return
     endif
   endfor

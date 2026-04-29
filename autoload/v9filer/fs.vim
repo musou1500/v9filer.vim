@@ -34,12 +34,12 @@ export def ListDir(root: string, show_hidden: bool): list<dict<any>>
     endif
     var path = Join(root, name)
     var is_dir = isdirectory(path)
-    var suffix = is_dir ? '/' : FileSuffix(path)
     add(entries, {
       name: name,
       path: Normalize(path),
       is_dir: is_dir,
-      suffix: suffix,
+      is_symlink: getftype(path) ==# 'link',
+      is_executable: !is_dir && executable(path),
     })
   endfor
 
@@ -100,13 +100,6 @@ export def Ancestors(path: string, root: string): list<string>
     insert(result, current)
   endif
   return result
-enddef
-
-def FileSuffix(path: string): string
-  if getftype(path) ==# 'link'
-    return '@'
-  endif
-  return executable(path) ? '*' : ''
 enddef
 
 def CompareEntries(a: dict<any>, b: dict<any>): number
