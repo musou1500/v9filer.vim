@@ -43,15 +43,15 @@ export def Refresh(): void
     AddHelp(view)
   endif
 
-  AddTreeEntries(
+  AddDirectoryTree(
     view,
     state.Root(),
     0,
     state.ShowHidden(),
     state.Expanded()
   )
-  if render_view.entry_count == 0
-    AddDirectoryTree(view)
+  if view.entry_count == 0
+    AddEmptyLine(view)
   endif
 
   Flush(view)
@@ -73,7 +73,7 @@ enddef
 def AddHeader(view: dict<any>): void
   var header_text = fnamemodify(fs.Normalize(state.Root()), ':~')
   add(view.lines, header_text)
-  add(view.highlight_positions.breadcrumb, [len(render_view.lines), 1, strlen(header_text)])
+  add(view.highlight_positions.breadcrumb, [len(view.lines), 1, strlen(header_text)])
 enddef
 
 def AddHelp(view: dict<any>): void
@@ -84,8 +84,8 @@ def AddHelp(view: dict<any>): void
 enddef
 
 def AddEmptyLine(view: dict<any>): void
-  add(view.lines, '')
-  add(view.highlight_positions.empty_lines, [len(view.lines), 1, 1])
+  add(view.lines, '  [empty]')
+  add(view.highlight_positions.empty_lines, [len(view.lines), 3, 7])
 enddef
 
 def AddDirectoryTree(
