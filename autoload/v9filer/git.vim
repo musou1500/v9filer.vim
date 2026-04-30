@@ -27,19 +27,12 @@ export def StatusFor(root: string): dict<any>
     '--untracked-files=all',
   ])
   if v:shell_error != 0
-    return status
+    throw 'v9filer: failed to get git status for ' .. repo_root
   endif
 
   for line in lines
-    var kind = KindForLine(line)
-    for path in ChangedPaths(line)
-      var full_path = fs.Normalize(fs.Join(repo_root, path))
-      status.files[full_path] = MergeFileKind(
-        get(status.files, full_path, ''),
-        kind
-      )
-      MarkDirectories(status.directories, full_path, repo_root)
-    endfor
+    var parsed = ParseStatusLine(line)
+    ApplyStatusLine(status, repo_root, parsed)
   endfor
 
   return status
@@ -65,45 +58,64 @@ def RepositoryRoot(root: string): string
   return fs.Normalize(lines[0])
 enddef
 
-def KindForLine(line: string): string
-  if stridx(line, '??') == 0 || strpart(line, 0, 2) =~# 'A'
-    return 'added'
-  endif
-  return 'changed'
-enddef
 
-def MergeFileKind(current: string, next: string): string
-  if current ==# 'added' || next ==# 'added'
-    return 'added'
-  endif
-  return 'changed'
-enddef
-
-def ChangedPaths(line: string): list<string>
+# Parse porcelain v1 status line
+def ParseStatusLine(line: string): dict<any>
   if strlen(line) < 4
-    return []
+    ThrowParseError(line, 'too short')
   endif
+  if strpart(line, 2, 1) !=# ' '
+    ThrowParseError(line, 'missing field separator')
+  endif
+
+  var status_text = strpart(line, 0, 2)
+  var is_rename_or_copy = status_text =~# '[RC]'
 
   var path_text = strpart(line, 3)
   if empty(path_text)
-    return []
+    ThrowParseError(line, 'missing path')
   endif
 
-  if stridx(path_text, ' -> ') >= 0
-    return split(path_text, ' -> ')
+  var orig_path = ''
+  var path = path_text
+  if is_rename_or_copy
+    if stridx(path_text, ' -> ') < 0
+      ThrowParseError(line, 'missing rename/copy separator')
+    endif
+    var parts = split(path_text, ' -> ')
+    if len(parts) != 2
+      ThrowParseError(line, 'ambiguous rename/copy paths')
+    endif
+    orig_path = get(parts, 0, '')
+    path = get(parts, 1, '')
+
+    if empty(orig_path)
+      ThrowParseError(line, 'missing original path for rename/copy')
+    endif
+  endif
+  
+  if empty(path)
+    ThrowParseError(line, 'missing path')
   endif
 
-  return [path_text]
+  return {status: status_text, orig_path: orig_path, path: path}
 enddef
 
-def MarkDirectories(directories: dict<bool>, path: string, repo_root: string): void
-  var current = fs.Parent(path)
-  var root = fs.Normalize(repo_root)
-  while fs.IsUnder(current, root)
-    directories[current] = true
-    if current ==# root
-      return
-    endif
-    current = fs.Parent(current)
-  endwhile
+def ThrowParseError(line: string, reason: string): void
+  throw 'v9filer: invalid git porcelain v1 status line: '
+    .. reason .. ': ' .. string(line)
+enddef
+
+def ApplyStatusLine(status: dict<any>, repo_root: string, parsed: dict<any>): void
+  var kind = parsed.status ==# '??' || parsed.status =~# 'A'
+    ? 'added'
+    : 'changed'
+
+  var full_path = fs.Normalize(fs.Join(repo_root, parsed.path))
+  if get(status.files, full_path, '') !=# 'added'
+    status.files[full_path] = kind
+  endif
+  for directory in fs.Ancestors(full_path, repo_root)
+    status.directories[directory] = true
+  endfor
 enddef

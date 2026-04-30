@@ -195,7 +195,9 @@ def AddEntry(
   # git status
   var git_status_kind = git.KindFor(git_status, entry.path, entry.is_dir)
   if !empty(git_status_kind)
-    var git_status_text = GitStatusText(git_status_kind)
+    var git_status_text = git_status_kind ==# 'added'
+      ? '[+]'
+      : git_status_kind ==# 'changed' ? '[~]' : '[*]'
     var git_status_group = git_status_kind ==# 'added'
       ? view.highlight_positions.git_added_statuses
       : view.highlight_positions.git_changed_statuses
@@ -261,16 +263,6 @@ def IconHighlightGroup(color: string, fallback: string): string
   var group = 'V9FilerIconColor' .. tolower(strpart(color, 1))
   execute 'highlight ' .. group .. ' guifg=' .. color
   return group
-enddef
-
-def GitStatusText(kind: string): string
-  if kind ==# 'added'
-    return '[+]'
-  endif
-  if kind ==# 'changed'
-    return '[~]'
-  endif
-  return '[*]'
 enddef
 
 export def ClearHighlights(): void
