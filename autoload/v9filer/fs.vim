@@ -1,5 +1,13 @@
 vim9script
 
+# Directory entries returned by ListDir() describe one filesystem child.
+# {
+#   name: string,          # basename as returned by readdir()
+#   path: string,          # normalized absolute path
+#   is_dir: bool,          # true for directories, including directory links
+#   is_symlink: bool,      # true when getftype(path) is "link"
+#   is_executable: bool,   # true for executable non-directories
+# }
 export def Normalize(path: string): string
   var normalized = fnamemodify(empty(path) ? getcwd() : path, ':p')
   normalized = substitute(normalized, '/\+$', '', '')

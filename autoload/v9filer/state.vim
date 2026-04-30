@@ -1,5 +1,15 @@
 vim9script
 
+# State is stored in b:v9filer_state for each filer buffer.
+# {
+#   root: string,        # normalized directory displayed as the tree root
+#   mode: string,        # "embedded" or "toggle"
+#   show_hidden: bool,   # whether dotfiles are listed
+#   expanded: dict<bool>, # absolute directory path -> expanded
+#   line_paths: dict<string>, # 1-based buffer line number as string -> path
+#   help: bool,          # whether the quick-help rows are visible
+#   prev_buf: number,    # buffer to restore when closing embedded mode
+# }
 export def New(root: string, mode: string, prev_buf: number): dict<any>
   return {
     root: root,

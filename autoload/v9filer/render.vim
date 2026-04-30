@@ -4,113 +4,194 @@ import './state.vim' as state
 import './fs.vim' as fs
 import './icons.vim' as icons
 
+const IconHighlightGroups: dict<string> = {
+  directory: 'V9FilerIconDirectory',
+  executable: 'V9FilerIconExecutable',
+  file: 'V9FilerIconFile',
+  symlink: 'V9FilerIconSymlink',
+}
+
+# Rendering is staged through a view dictionary: collect the text lines and
+# highlight positions first, write the lines to the buffer, then apply all
+# highlights with matchaddpos().
 export def Refresh(): void
   if !state.Has()
     return
   endif
 
-  var lines: list<string> = []
-  var line_paths: dict<any> = {}
-  var line_meta: list<dict<any>> = []
-  add(lines, BuildHeader(state.Root()))
+  var view = {
+    lines: [],
+    line_paths: {},
+    entry_count: 0,
+    highlight_positions: {
+      breadcrumb: [],
+      help: [],
+      directories: [],
+      files: [],
+      hidden: [],
+      markers: [],
+      icons: {},
+      symlinks: [],
+      executables: [],
+      empty_lines: [],
+    },
+  }
 
-  var help_enabled = state.HelpEnabled()
-  var icons_enabled = icons.IconsEnabled()
-  if help_enabled
-    add(lines, '? help | <CR> open/toggle | l enter | - parent | . hidden | R refresh | q close')
-    add(lines, '')
+  AddHeader(view)
+
+  if state.HelpEnabled()
+    AddHelp(view)
   endif
 
-  BuildTree(
+  AddTreeEntries(
+    view,
     state.Root(),
     0,
-    lines,
-    line_paths,
-    line_meta,
     state.ShowHidden(),
-    state.Expanded(),
-    icons_enabled
+    state.Expanded()
   )
-  if len(lines) == 1 || (help_enabled && len(lines) == 3)
-    add(lines, '  [empty]')
-    add(line_meta, {line: len(lines), kind: 'empty', start: 3, length: 7})
+  if render_view.entry_count == 0
+    AddDirectoryTree(view)
   endif
 
-  state.SetLinePaths(line_paths)
-
-  var view = winsaveview()
-  setlocal modifiable
-  silent! :%delete _
-  setline(1, lines)
-  setlocal nomodifiable
-  setlocal nomodified
-  ApplyHighlights(lines, line_meta)
-  winrestview(view)
+  Flush(view)
 enddef
 
-def BuildTree(
+def Flush(view: dict<any>): void
+  state.SetLinePaths(view.line_paths)
+
+  var saved_view = winsaveview()
+  setlocal modifiable
+  silent! :%delete _
+  setline(1, view.lines)
+  setlocal nomodifiable
+  setlocal nomodified
+  ApplyHighlights(view)
+  winrestview(saved_view)
+enddef
+
+def AddHeader(view: dict<any>): void
+  var header_text = fnamemodify(fs.Normalize(state.Root()), ':~')
+  add(view.lines, header_text)
+  add(view.highlight_positions.breadcrumb, [len(render_view.lines), 1, strlen(header_text)])
+enddef
+
+def AddHelp(view: dict<any>): void
+  var help_text = '? help | <CR> open/toggle | l enter | - parent | . hidden | R refresh | q close'
+  add(view.lines, help_text)
+  add(view.highlight_positions.help, [len(view.lines), 1, strlen(help_text)])
+  add(view.lines, '')
+enddef
+
+def AddEmptyLine(view: dict<any>): void
+  add(view.lines, '')
+  add(view.highlight_positions.empty_lines, [len(view.lines), 1, 1])
+enddef
+
+def AddDirectoryTree(
+    view: dict<any>,
     root: string,
     depth: number,
-    lines: list<string>,
-    line_paths: dict<any>,
-    line_meta: list<dict<any>>,
     show_hidden: bool,
-    expanded: dict<any>,
-    icons_enabled: bool
+    expanded: dict<any>
   ): void
   for entry in fs.ListDir(root, show_hidden)
     var expanded_dir = get(expanded, entry.path, false)
-    var marker = entry.is_dir ? (expanded_dir ? '- ' : '+ ') : '  '
-    var indent = repeat('  ', depth)
-    var icon = icons_enabled ? icons.IconForEntry(entry) : {}
-    var icon_text = get(icon, 'text', '')
-    var suffix = EntrySuffix(entry)
-    var prefix = indent .. marker .. icon_text
-    var line = prefix .. entry.name .. suffix
-    add(lines, line)
-    line_paths[string(len(lines))] = entry.path
-    add(line_meta, {
-      line: len(lines),
-      kind: entry.is_dir ? 'directory' : 'file',
-      start: strlen(prefix) + 1,
-      length: strlen(entry.name),
-      marker_start: strlen(indent) + 1,
-      marker_length: strlen(marker),
-      icon_start: strlen(indent) + strlen(marker) + 1,
-      icon_length: strlen(icon_text),
-      icon_group: get(icon, 'group', 'V9FilerIconFile'),
-      icon_color: get(icon, 'color', ''),
-      suffix_start: strlen(prefix) + strlen(entry.name) + 1,
-      suffix_length: strlen(suffix),
-      suffix: suffix,
-      hidden: entry.name =~# '^\.',
-    })
+    AddEntry(view, entry, depth, expanded_dir, icons.Resolve(entry))
     if entry.is_dir && expanded_dir
-      BuildTree(
+      AddDirectoryTree(
+        view,
         entry.path,
         depth + 1,
-        lines,
-        line_paths,
-        line_meta,
         show_hidden,
-        expanded,
-        icons_enabled
+        expanded
       )
     endif
   endfor
 enddef
 
-def EntrySuffix(entry: dict<any>): string
+def AddEntry(
+    view: dict<any>,
+    entry: dict<any>,
+    depth: number,
+    expanded_dir: bool,
+    icon: dict<string>
+  ): void
+  # Entry lines are composed as: indent + marker + icon + name + type suffix.
+  # Examples without an icon:
+  #   1. "- src/"        expanded directory at depth 0. the marker is '- '.
+  #   2. "  app.vim"     file at depth 0; the marker is two alignment spaces
+  #   3. "      app.vim" file at depth 2; indent is four spaces, marker is two alignment spaces
+  #   4. "    run*"      executable at depth 1. the suffix is '*'. marker is two alignment spaces.
+  #   5. "    link@"     symlink at depth 1. the suffix is '@'. marker is two alignment spaces.
+
+  var lnum = len(view.lines) + 1
+  var text = ''
+  var col = 1
+
+  # indent
+  var indent = repeat('  ', depth)
+  text ..= indent
+  col += strlen(indent)
+
+  # marker
+  var marker = entry.is_dir ? (expanded_dir ? '- ' : '+ ') : '  '
+  var marker_width = strlen(marker)
+  text ..= marker
+  add(view.highlight_positions.markers, [lnum, col, marker_width])
+  col += marker_width
+
+  # icon
+  var icon_text = icon.text
+  var icon_width = strlen(icon_text)
+  text ..= icon_text
+  if icon_width > 0
+    var icon_group = IconHighlightGroup(
+      get(icon, 'color', ''),
+      get(IconHighlightGroups, get(icon, 'kind', 'file'), 'V9FilerIconFile')
+    )
+    if !has_key(view.highlight_positions.icons, icon_group)
+      view.highlight_positions.icons[icon_group] = []
+    endif
+    add(view.highlight_positions.icons[icon_group], [lnum, col, icon_width])
+  endif
+  col += icon_width
+
+  # name
+  var name_width = strlen(entry.name)
+  text ..= entry.name
   if entry.is_dir
-    return '/'
+    add(view.highlight_positions.directories, [lnum, col, name_width])
+  else
+    add(view.highlight_positions.files, [lnum, col, name_width])
   endif
-  if get(entry, 'is_symlink', false)
-    return '@'
+  if entry.name =~# '^\.'
+    add(view.highlight_positions.hidden, [lnum, col, name_width])
   endif
-  return get(entry, 'is_executable', false) ? '*' : ''
+  col += name_width
+
+  # suffix
+  var suffix = ''
+  if entry.is_dir
+    suffix = '/'
+  elseif get(entry, 'is_symlink', false)
+    suffix = '@'
+    add(view.highlight_positions.symlinks, [lnum, col, strlen(suffix)])
+  else
+    suffix = get(entry, 'is_executable', false) ? '*' : ''
+    if get(entry, 'is_executable', false)
+      add(view.highlight_positions.executables, [lnum, col, strlen(suffix)])
+    endif
+  endif
+  text ..= suffix
+
+  # apply built text and highlights to view
+  add(view.lines, text)
+  view.line_paths[string(lnum)] = entry.path
+  view.entry_count += 1
 enddef
 
-def ApplyHighlights(lines: list<string>, line_meta: list<dict<any>>): void
+def ApplyHighlights(view: dict<any>): void
   ClearHighlights()
   if !get(g:, 'v9filer_use_colors', true)
     return
@@ -118,77 +199,19 @@ def ApplyHighlights(lines: list<string>, line_meta: list<dict<any>>): void
 
   EnsureHighlightGroups()
 
-  if !empty(lines[0])
-    AddMatch('V9FilerBreadcrumb', [[1, 1, strlen(lines[0])]], 10)
-  endif
-
-  if len(lines) > 1 && lines[1] =~# '^? help'
-    AddMatch('V9FilerHelp', [[2, 1, strlen(lines[1])]], 10)
-  endif
-
-  var directories: list<list<number>> = []
-  var files: list<list<number>> = []
-  var hidden: list<list<number>> = []
-  var markers: list<list<number>> = []
-  var icon_positions: dict<list<list<number>>> = {}
-  var symlinks: list<list<number>> = []
-  var executables: list<list<number>> = []
-  var empty_lines: list<list<number>> = []
-
-  for meta in line_meta
-    var kind = get(meta, 'kind', '')
-    if kind ==# 'empty'
-      add(empty_lines, [meta.line, meta.start, meta.length])
-      continue
-    endif
-
-    if get(meta, 'marker_length', 0) > 0
-      add(markers, [meta.line, meta.marker_start, meta.marker_length])
-    endif
-    if get(meta, 'icon_length', 0) > 0
-      var icon_group = IconHighlightGroup(
-        get(meta, 'icon_color', ''),
-        get(meta, 'icon_group', 'V9FilerIconFile')
-      )
-      if empty(icon_group)
-        icon_group = 'V9FilerIconFile'
-      endif
-      if !has_key(icon_positions, icon_group)
-        icon_positions[icon_group] = []
-      endif
-      add(icon_positions[icon_group], [meta.line, meta.icon_start, meta.icon_length])
-    endif
-
-    var name_pos = [meta.line, meta.start, meta.length]
-    if kind ==# 'directory'
-      add(directories, name_pos)
-    else
-      add(files, name_pos)
-    endif
-    if get(meta, 'hidden', false)
-      add(hidden, name_pos)
-    endif
-
-    if get(meta, 'suffix_length', 0) > 0
-      var suffix_pos = [meta.line, meta.suffix_start, meta.suffix_length]
-      if meta.suffix ==# '@'
-        add(symlinks, suffix_pos)
-      elseif meta.suffix ==# '*'
-        add(executables, suffix_pos)
-      endif
-    endif
+  var positions = view.highlight_positions
+  AddMatch('V9FilerBreadcrumb', positions.breadcrumb, 10)
+  AddMatch('V9FilerHelp', positions.help, 10)
+  AddMatch('V9FilerDirectory', positions.directories, 10)
+  AddMatch('V9FilerFile', positions.files, 10)
+  AddMatch('V9FilerMarker', positions.markers, 11)
+  for [group, icon_positions] in items(positions.icons)
+    AddMatch(group, icon_positions, 11)
   endfor
-
-  AddMatch('V9FilerDirectory', directories, 10)
-  AddMatch('V9FilerFile', files, 10)
-  AddMatch('V9FilerMarker', markers, 11)
-  for [group, positions] in items(icon_positions)
-    AddMatch(group, positions, 11)
-  endfor
-  AddMatch('V9FilerSymlink', symlinks, 12)
-  AddMatch('V9FilerExecutable', executables, 12)
-  AddMatch('V9FilerHidden', hidden, 13)
-  AddMatch('V9FilerEmpty', empty_lines, 10)
+  AddMatch('V9FilerSymlink', positions.symlinks, 12)
+  AddMatch('V9FilerExecutable', positions.executables, 12)
+  AddMatch('V9FilerHidden', positions.hidden, 13)
+  AddMatch('V9FilerEmpty', positions.empty_lines, 10)
 enddef
 
 def EnsureHighlightGroups(): void
@@ -231,12 +254,6 @@ def AddMatch(group: string, positions: list<list<number>>, priority: number): vo
   if empty(positions)
     return
   endif
-  for start in range(0, len(positions) - 1, 8)
-    var id = matchaddpos(group, positions[start : start + 7], priority)
-    add(w:v9filer_match_ids, id)
-  endfor
-enddef
-
-def BuildHeader(root: string): string
-  return 'v9filer: ' .. fnamemodify(fs.Normalize(root), ':~')
+  var id = matchaddpos(group, positions, priority)
+  add(w:v9filer_match_ids, id)
 enddef

@@ -40,6 +40,11 @@ def IsFilerBuffer(): bool
   return state.Has()
 enddef
 
+# ParsedArgs is the internal result of :V9Filer argument parsing.
+# {
+#   toggle: bool,  # true when "-toggle" was present
+#   root: string,  # raw directory argument before fs.Normalize()
+# }
 def ParseArgs(args: string): dict<any>
   var parts = empty(args) ? [] : split(args)
   var toggle = false
