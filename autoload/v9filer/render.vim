@@ -2,6 +2,7 @@ vim9script
 
 import './state.vim' as state
 import './fs.vim' as fs
+import './git.vim' as git
 import './icons.vim' as icons
 
 const IconHighlightGroups: dict<string> = {
@@ -30,6 +31,8 @@ export def Refresh(): void
       files: [],
       hidden: [],
       markers: [],
+      git_added_statuses: [],
+      git_changed_statuses: [],
       icons: {},
       symlinks: [],
       executables: [],
@@ -48,7 +51,8 @@ export def Refresh(): void
     state.Root(),
     0,
     state.ShowHidden(),
-    state.Expanded()
+    state.Expanded(),
+    git.StatusFor(state.Root())
   )
   if view.entry_count == 0
     AddEmptyLine(view)
@@ -93,18 +97,20 @@ def AddDirectoryTree(
     root: string,
     depth: number,
     show_hidden: bool,
-    expanded: dict<any>
+    expanded: dict<any>,
+    git_status: dict<any>
   ): void
   for entry in fs.ListDir(root, show_hidden)
     var expanded_dir = get(expanded, entry.path, false)
-    AddEntry(view, entry, depth, expanded_dir, icons.Resolve(entry))
+    AddEntry(view, entry, depth, expanded_dir, icons.Resolve(entry), git_status)
     if entry.is_dir && expanded_dir
       AddDirectoryTree(
         view,
         entry.path,
         depth + 1,
         show_hidden,
-        expanded
+        expanded,
+        git_status
       )
     endif
   endfor
@@ -115,9 +121,10 @@ def AddEntry(
     entry: dict<any>,
     depth: number,
     expanded_dir: bool,
-    icon: dict<string>
+    icon: dict<string>,
+    git_status: dict<any>
   ): void
-  # Entry lines are composed as: indent + marker + icon + name + type suffix.
+  # Entry lines are composed as: indent + marker + icon + name + type suffix + git status.
   # Examples without an icon:
   #   1. "- src/"        expanded directory at depth 0. the marker is '- '.
   #   2. "  app.vim"     file at depth 0; the marker is two alignment spaces
@@ -185,6 +192,18 @@ def AddEntry(
   endif
   text ..= suffix
 
+  # git status
+  var git_status_kind = git.KindFor(git_status, entry.path, entry.is_dir)
+  if !empty(git_status_kind)
+    var git_status_text = GitStatusText(git_status_kind)
+    var git_status_group = git_status_kind ==# 'added'
+      ? view.highlight_positions.git_added_statuses
+      : view.highlight_positions.git_changed_statuses
+    col += strlen(suffix) + 1
+    add(git_status_group, [lnum, col, strlen(git_status_text)])
+    text ..= ' ' .. git_status_text
+  endif
+
   # apply built text and highlights to view
   add(view.lines, text)
   view.line_paths[string(lnum)] = entry.path
@@ -205,6 +224,8 @@ def ApplyHighlights(view: dict<any>): void
   AddMatch('V9FilerDirectory', positions.directories, 10)
   AddMatch('V9FilerFile', positions.files, 10)
   AddMatch('V9FilerMarker', positions.markers, 11)
+  AddMatch('V9FilerGitChanged', positions.git_changed_statuses, 12)
+  AddMatch('V9FilerGitAdded', positions.git_added_statuses, 12)
   for [group, icon_positions] in items(positions.icons)
     AddMatch(group, icon_positions, 11)
   endfor
@@ -219,6 +240,8 @@ def EnsureHighlightGroups(): void
   highlight default link V9FilerDirectory Directory
   highlight default link V9FilerFile Normal
   highlight default link V9FilerMarker Special
+  highlight default V9FilerGitChanged cterm=bold gui=bold ctermfg=179 guifg=#C89B5A
+  highlight default V9FilerGitAdded cterm=bold gui=bold ctermfg=108 guifg=#7FAF7F
   highlight default link V9FilerIconDirectory Directory
   highlight default link V9FilerIconExecutable Statement
   highlight default link V9FilerIconFile Normal
@@ -238,6 +261,16 @@ def IconHighlightGroup(color: string, fallback: string): string
   var group = 'V9FilerIconColor' .. tolower(strpart(color, 1))
   execute 'highlight ' .. group .. ' guifg=' .. color
   return group
+enddef
+
+def GitStatusText(kind: string): string
+  if kind ==# 'added'
+    return '[+]'
+  endif
+  if kind ==# 'changed'
+    return '[~]'
+  endif
+  return '[*]'
 enddef
 
 export def ClearHighlights(): void

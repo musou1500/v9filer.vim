@@ -38,6 +38,12 @@ File entries may include a suffix indicating their type:
     `@`  symbolic link
     `*`  executable file
 
+When the displayed directory is inside a Git repository, entries with changes
+show a short status marker after the entry name and type suffix. File entries
+show `[~]` for edited files and `[+]` for created files. Directory entries
+show `[*]` when at least one file below that directory has changed; the exact
+change kind is not shown for directories.
+
 The filer highlights the header, directories, suffixes, hidden entries, help
 text, and empty directory placeholders by default. Optional Nerd Font icons
 can be added before entry names.
@@ -208,12 +214,14 @@ Other ~
 
 Highlight groups ~
 
-The default highlight links are:
+The default highlight links and colors are:
 
     V9FilerBreadcrumb      -> Title
     V9FilerDirectory       -> Directory
     V9FilerFile            -> Normal
     V9FilerMarker          -> Special
+    V9FilerGitChanged      cterm=bold gui=bold ctermfg=179 guifg=#C89B5A
+    V9FilerGitAdded        cterm=bold gui=bold ctermfg=108 guifg=#7FAF7F
     V9FilerIconDirectory   -> Directory
     V9FilerIconFile        -> Normal
     V9FilerIconExecutable  -> Statement
