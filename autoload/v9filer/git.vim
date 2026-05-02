@@ -2,7 +2,7 @@ vim9script
 
 import './fs.vim' as fs
 
-# Returns render-ready Git status for the tree under root.
+# Returns Git status kinds for the tree under root.
 # Paths are normalized absolute paths, and symlinks are matched as links
 # instead of resolving their targets. Outside a Git repository, status is empty.
 #
@@ -14,8 +14,8 @@ import './fs.vim' as fs
 #
 # GitStatus is keyed by normalized absolute paths.
 # {
-#   files: dict<dict>,       # file or symlink path -> display status
-#   directories: dict<dict>, # directory path -> strongest descendant status
+#   files: dict<dict>,       # file or symlink path -> status kind
+#   directories: dict<dict>, # directory path -> strongest descendant status kind
 # }
 export def StatusFor(root: string): dict<any>
   var status = EmptyStatus()
@@ -34,8 +34,13 @@ export def HasChange(status: dict<any>, path: string, is_dir: bool): bool
   return !empty(EntryStatus(status, path, is_dir))
 enddef
 
-export def KindFor(status: dict<any>, path: string, is_dir: bool): string
-  return get(EntryStatus(status, path, is_dir), 'kind', '')
+export def KindFor(
+    status: dict<any>,
+    path: string,
+    is_dir: bool,
+    is_symlink: bool = false
+  ): string
+  return get(EntryStatus(status, path, is_dir, is_symlink), 'kind', '')
 enddef
 
 export def EntryStatus(
@@ -114,8 +119,6 @@ def ParseStatusLine(line: string): dict<any>
 
   return {
     kind: kind,
-    label: StatusLabel(kind),
-    rank: StatusRank(kind),
     path: DecodePath(path_text),
   }
 enddef
@@ -133,22 +136,17 @@ def StatusKind(status_text: string): string
   return 'modified'
 enddef
 
-def StatusLabel(kind: string): string
-  return get({
-    'new': '[N]',
-    'modified': '[M]',
-    'deleted': '[D]',
-    'conflict': '[!]',
-  }, kind, '[git]')
-enddef
-
 def StatusRank(kind: string): number
-  return get({
+  var ranks = {
     'new': 10,
     'modified': 20,
     'deleted': 30,
     'conflict': 40,
-  }, kind, 1)
+  }
+  if !has_key(ranks, kind)
+    throw 'v9filer: invalid git status kind: ' .. string(kind)
+  endif
+  return ranks[kind]
 enddef
 
 def DecodePath(path_text: string): string
@@ -221,22 +219,21 @@ enddef
 
 def AddStatusLine(status: dict<any>, repo_root: string, parsed: dict<any>): void
   var path = fs.Normalize(fs.Join(repo_root, parsed.path))
-  var display_status = {
+  var entry_status = {
     kind: parsed.kind,
-    label: parsed.label,
-    rank: parsed.rank,
   }
+  var entry_rank = StatusRank(parsed.kind)
 
   # Symlinks are matched by the link path reported by Git. Their targets are
   # intentionally not resolved, so a link does not inherit target changes.
   var current_file_status = get(status.files, path, {})
-  if empty(current_file_status) || display_status.rank > current_file_status.rank
-    status.files[path] = display_status
+  if empty(current_file_status) || entry_rank > StatusRank(current_file_status.kind)
+    status.files[path] = entry_status
   endif
   for directory in fs.Ancestors(path, repo_root)
     var current_directory_status = get(status.directories, directory, {})
-    if empty(current_directory_status) || display_status.rank > current_directory_status.rank
-      status.directories[directory] = display_status
+    if empty(current_directory_status) || entry_rank > StatusRank(current_directory_status.kind)
+      status.directories[directory] = entry_status
     endif
   endfor
 enddef

@@ -81,13 +81,14 @@ def AddHeader(view: dict<any>, git_status: dict<any>): void
   var header_text = fnamemodify(fs.Normalize(state.Root()), ':~')
   var lnum = len(view.lines) + 1
   var text = header_text
-  var root_status = git.EntryStatus(git_status, state.Root(), true)
-  if !empty(root_status)
-    text ..= ' ' .. root_status.label
-    add(GitStatusHighlightGroup(view, get(root_status, 'kind', '')), [
+  var root_status_kind = git.KindFor(git_status, state.Root(), true)
+  if !empty(root_status_kind)
+    var root_status_label = GitStatusLabel(root_status_kind)
+    text ..= ' ' .. root_status_label
+    add(GitStatusHighlightGroup(view, root_status_kind), [
       lnum,
       strlen(header_text) + 2,
-      strlen(root_status.label),
+      strlen(root_status_label),
     ])
   endif
   add(view.lines, text)
@@ -210,17 +211,17 @@ def AddEntry(
   endif
 
   # git status
-  var entry_git_status = git.EntryStatus(
+  var git_status_kind = git.KindFor(
     git_status,
     entry.path,
     entry.is_dir,
     get(entry, 'is_symlink', false)
   )
-  if !empty(entry_git_status)
-    var git_status_text = entry_git_status.label
+  if !empty(git_status_kind)
+    var git_status_text = GitStatusLabel(git_status_kind)
     var git_status_group = GitStatusHighlightGroup(
       view,
-      get(entry_git_status, 'kind', '')
+      git_status_kind
     )
     text ..= ' '
     col += 1
@@ -291,9 +292,25 @@ def IconHighlightGroup(color: string, fallback: string): string
   return group
 enddef
 
+def GitStatusLabel(kind: string): string
+  var labels = {
+    'new': '[N]',
+    'modified': '[M]',
+    'deleted': '[D]',
+    'conflict': '[!]',
+  }
+  if !has_key(labels, kind)
+    throw 'v9filer: invalid git status kind: ' .. string(kind)
+  endif
+  return labels[kind]
+enddef
+
 def GitStatusHighlightGroup(view: dict<any>, kind: string): list<list<number>>
   if kind ==# 'new'
     return view.highlight_positions.git_new_statuses
+  endif
+  if kind ==# 'modified'
+    return view.highlight_positions.git_modified_statuses
   endif
   if kind ==# 'deleted'
     return view.highlight_positions.git_deleted_statuses
@@ -301,7 +318,7 @@ def GitStatusHighlightGroup(view: dict<any>, kind: string): list<list<number>>
   if kind ==# 'conflict'
     return view.highlight_positions.git_conflict_statuses
   endif
-  return view.highlight_positions.git_modified_statuses
+  throw 'v9filer: invalid git status kind: ' .. string(kind)
 enddef
 
 export def ClearHighlights(): void

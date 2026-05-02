@@ -45,11 +45,11 @@ suffix:
     `[N]`  new or untracked
     `[M]`  modified
     `[D]`  deleted below this directory
-    `[C]`  merge conflict
+    `[!]`  merge conflict
 
 Directory entries and the header show the strongest status found below that
 directory, so a directory containing both modified and conflicted files shows
-`[C]`. Deleted files cannot appear as file entries because they no longer
+`[!]`. Deleted files cannot appear as file entries because they no longer
 exist in the filesystem, but their parent directories and the header still show
 `[D]`.
 
@@ -306,7 +306,7 @@ Compared to earlier releases:
   names with a Vim regular expression.
 
 - Git status markers changed from `[+]`, `[~]`, and `[*]` to the color-coded
-  `[N]`, `[M]`, `[D]`, and `[C]` markers. The highlight groups were also split
+  `[N]`, `[M]`, `[D]`, and `[!]` markers. The highlight groups were also split
   into `V9FilerGitNew`, `V9FilerGitModified`,
   `V9FilerGitDeleted`, and `V9FilerGitConflict`.
 
