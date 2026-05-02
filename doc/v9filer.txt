@@ -57,8 +57,10 @@ Symbolic links are matched by the link path reported by Git. The link target is
 not resolved for Git status, so a symlink shows the status of the link itself
 and does not inherit changes from its target.
 
-Paths used for Git status matching are normalized to absolute paths with
-trailing slashes removed. Symlinks are not resolved during this normalization.
+Paths used for Git status matching are mapped back to the displayed root and
+normalized to absolute paths with trailing slashes removed. Symlinks are not
+resolved during this normalization, so opening a repository through a symlink
+keeps status markers attached to the displayed symlink path.
 
 The filer highlights the header, directories, suffixes, hidden entries, help
 text, and empty directory placeholders by default. Optional Nerd Font icons

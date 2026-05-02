@@ -7,9 +7,11 @@ import './fs.vim' as fs
 # instead of resolving their targets. Outside a Git repository, status is empty.
 #
 # Processing flow:
-#   1. Find the repository root for the displayed root.
+#   1. Find the Git prefix for the displayed root.
 #   2. Read `git status --porcelain=v1` as stable path/status records.
-#   3. Store direct file/link status and aggregate the strongest descendant
+#   3. Map repository-relative Git paths back onto the displayed root, preserving
+#      symlink spellings used to open the tree.
+#   4. Store direct file/link status and aggregate the strongest descendant
 #      status onto each ancestor directory.
 #
 # GitStatus is keyed by normalized absolute paths.
@@ -19,13 +21,17 @@ import './fs.vim' as fs
 # }
 export def StatusFor(root: string): dict<any>
   var status = EmptyStatus()
-  var repo_root = RepositoryRoot(root)
-  if empty(repo_root)
+  var context = RepositoryContext(root)
+  if empty(context)
     return status
   endif
 
-  for line in StatusLines(repo_root)
-    AddStatusLine(status, repo_root, ParseStatusLine(line))
+  for record in StatusRecords(context.display_root)
+    var parsed = ParseStatusRecord(record)
+    var path = DisplayPathForGitPath(context, parsed.path)
+    if !empty(path)
+      AddStatusPath(status, context.display_root, path, parsed.kind)
+    endif
   endfor
   return status
 enddef
@@ -57,7 +63,13 @@ export def EntryStatus(
     endif
   endif
   if is_dir
-    return get(get(status, 'directories', {}), normalized, {})
+    # Dirty submodules are reported by Git as a direct status on the directory
+    # path, not as descendant file changes. Keep that direct status visible on
+    # the directory entry while still aggregating ordinary descendant changes.
+    return StrongerStatus(
+      get(get(status, 'files', {}), normalized, {}),
+      get(get(status, 'directories', {}), normalized, {})
+    )
   endif
   return get(get(status, 'files', {}), normalized, {})
 enddef
@@ -69,15 +81,25 @@ def EmptyStatus(): dict<any>
   }
 enddef
 
-def RepositoryRoot(root: string): string
-  var lines = systemlist(['git', '-C', fs.Normalize(root), 'rev-parse', '--show-toplevel'])
+def RepositoryContext(root: string): dict<any>
+  var display_root = fs.Normalize(root)
+  var lines = systemlist([
+    'git',
+    '-C',
+    display_root,
+    'rev-parse',
+    '--show-prefix',
+  ])
   if v:shell_error != 0 || empty(lines)
-    return ''
+    return {}
   endif
-  return fs.Normalize(lines[0])
+  return {
+    display_root: display_root,
+    prefix: lines[0],
+  }
 enddef
 
-def StatusLines(repo_root: string): list<string>
+def StatusRecords(root: string): list<string>
   # --no-renames keeps a rename as separate delete/add records. That matches
   # the tree view: the new path can be shown directly, while the deleted old
   # path is only aggregated onto its parent directories.
@@ -86,34 +108,54 @@ def StatusLines(repo_root: string): list<string>
     '-c',
     'core.quotePath=false',
     '-C',
-    repo_root,
+    root,
     'status',
     '--porcelain=v1',
     '--untracked-files=all',
     '--no-renames',
   ])
   if v:shell_error != 0
-    throw 'v9filer: failed to get git status for ' .. repo_root
+    throw 'v9filer: failed to get git status for ' .. root
   endif
   return lines
 enddef
 
-# Expected porcelain v1 line with --no-renames:
-#   XY path
-# where XY is the two-column Git status and path is the repository-relative
-# path, possibly quoted by Git. Rename/copy "old -> new" lines are not expected.
-def ParseStatusLine(line: string): dict<any>
-  if strlen(line) < 4
-    ThrowParseError(line, 'too short')
-  endif
-  if strpart(line, 2, 1) !=# ' '
-    ThrowParseError(line, 'missing field separator')
+def DisplayPathForGitPath(context: dict<any>, git_path: string): string
+  var prefix = context.prefix
+  if empty(prefix)
+    return fs.Normalize(fs.Join(context.display_root, git_path))
   endif
 
-  var status_text = strpart(line, 0, 2)
-  var path_text = strpart(line, 3)
+  # Git status paths are always repository-relative, even when `-C` points at a
+  # subdirectory or a symlink to one. `--show-prefix` is the repository-relative
+  # spelling of the displayed root, so stripping it gives the path as seen by the
+  # tree buffer.
+  var root_path = substitute(prefix, '/\+$', '', '')
+  if git_path ==# root_path
+    return context.display_root
+  endif
+  if stridx(git_path, prefix) != 0
+    return ''
+  endif
+  return fs.Normalize(fs.Join(context.display_root, strpart(git_path, strlen(prefix))))
+enddef
+
+# Expected porcelain v1 record with --no-renames:
+#   XY path
+# where XY is the two-column Git status and path is the repository-relative
+# path, possibly quoted by Git. Rename/copy records are not expected.
+def ParseStatusRecord(record: string): dict<any>
+  if strlen(record) < 4
+    ThrowParseError(record, 'too short')
+  endif
+  if strpart(record, 2, 1) !=# ' '
+    ThrowParseError(record, 'missing field separator')
+  endif
+
+  var status_text = strpart(record, 0, 2)
+  var path_text = strpart(record, 3)
   if empty(path_text)
-    ThrowParseError(line, 'missing path')
+    ThrowParseError(record, 'missing path')
   endif
   var kind = StatusKind(status_text)
 
@@ -147,6 +189,16 @@ def StatusRank(kind: string): number
     throw 'v9filer: invalid git status kind: ' .. string(kind)
   endif
   return ranks[kind]
+enddef
+
+def StrongerStatus(a: dict<any>, b: dict<any>): dict<any>
+  if empty(a)
+    return b
+  endif
+  if empty(b)
+    return a
+  endif
+  return StatusRank(a.kind) >= StatusRank(b.kind) ? a : b
 enddef
 
 def DecodePath(path_text: string): string
@@ -209,7 +261,9 @@ def DecodeOctalEscape(text: string, start: number, end: number): list<any>
     digits ..= char
     index += 1
   endwhile
-  return [nr2char(str2nr(digits, 8)), index]
+  var byte = str2nr(digits, 8)
+  var decoded = join(blob2str(list2blob([byte]), {encoding: 'none'}), "\n")
+  return [decoded, index]
 enddef
 
 def ThrowParseError(line: string, reason: string): void
@@ -217,12 +271,11 @@ def ThrowParseError(line: string, reason: string): void
     .. reason .. ': ' .. string(line)
 enddef
 
-def AddStatusLine(status: dict<any>, repo_root: string, parsed: dict<any>): void
-  var path = fs.Normalize(fs.Join(repo_root, parsed.path))
+def AddStatusPath(status: dict<any>, root: string, path: string, kind: string): void
   var entry_status = {
-    kind: parsed.kind,
+    kind: kind,
   }
-  var entry_rank = StatusRank(parsed.kind)
+  var entry_rank = StatusRank(kind)
 
   # Symlinks are matched by the link path reported by Git. Their targets are
   # intentionally not resolved, so a link does not inherit target changes.
@@ -230,7 +283,7 @@ def AddStatusLine(status: dict<any>, repo_root: string, parsed: dict<any>): void
   if empty(current_file_status) || entry_rank > StatusRank(current_file_status.kind)
     status.files[path] = entry_status
   endif
-  for directory in fs.Ancestors(path, repo_root)
+  for directory in fs.Ancestors(path, root)
     var current_directory_status = get(status.directories, directory, {})
     if empty(current_directory_status) || entry_rank > StatusRank(current_directory_status.kind)
       status.directories[directory] = entry_status
