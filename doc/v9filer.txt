@@ -110,10 +110,13 @@ File operations ~
             prompt is shown before deletion.
 
     r       Rename the file or directory under the cursor. An input prompt
-            is shown for the new name.
+            is shown for the new name. If the target already exists, an
+            overwrite confirmation is shown first.
 
     %       Create a new file or directory in the current root. An input
             prompt is shown for the name. A trailing `/` creates a directory.
+            If the target already exists, an overwrite confirmation is shown
+            first.
 
 Other ~
 

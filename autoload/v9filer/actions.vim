@@ -53,6 +53,10 @@ export def RenameUnderCursor(): void
   endif
   var new_name = input('Rename to: ', fnamemodify(path, ':t'))
   if !empty(new_name)
+    var target = fs.RenameTarget(path, new_name)
+    if fs.Exists(target) && !ConfirmOverwrite(target)
+      return
+    endif
     fs.Rename(path, new_name)
     render.Refresh()
   endif
@@ -61,6 +65,10 @@ enddef
 export def CreateInRoot(): void
   var name = input('New file or directory: ')
   if !empty(name)
+    var target = fs.CreateTarget(state.Root(), name)
+    if fs.Exists(target) && !ConfirmOverwrite(target)
+      return
+    endif
     fs.Create(state.Root(), name)
     render.Refresh()
   endif
@@ -176,4 +184,8 @@ enddef
 
 def PathUnderCursor(): string
   return state.PathForLine(line('.'))
+enddef
+
+def ConfirmOverwrite(path: string): bool
+  return confirm('Overwrite ' .. path .. '?', "&Yes\n&No", 2) == 1
 enddef

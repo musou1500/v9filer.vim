@@ -27,6 +27,10 @@ export def IsDir(path: string): bool
   return isdirectory(path)
 enddef
 
+export def Exists(path: string): bool
+  return getftype(path) !=# ''
+enddef
+
 export def ListDir(root: string, show_hidden: bool): list<dict<any>>
   var entries: list<dict<any>> = []
   var names: list<string>
@@ -60,8 +64,7 @@ export def Create(root: string, name: string): void
   endif
 
   var is_dir = name =~# '/$'
-  var clean_name = substitute(name, '/\+$', '', '')
-  var path = Join(root, clean_name)
+  var path = CreateTarget(root, name)
   if is_dir
     mkdir(path, 'p')
   else
@@ -69,14 +72,23 @@ export def Create(root: string, name: string): void
   endif
 enddef
 
+export def CreateTarget(root: string, name: string): string
+  var clean_name = substitute(name, '/\+$', '', '')
+  return Join(root, clean_name)
+enddef
+
 export def Rename(path: string, new_name: string): void
   if empty(new_name)
     return
   endif
-  var target = Join(Parent(path), new_name)
+  var target = RenameTarget(path, new_name)
   if rename(path, target) != 0
     echoerr 'v9filer: failed to rename ' .. path
   endif
+enddef
+
+export def RenameTarget(path: string, new_name: string): string
+  return Join(Parent(path), new_name)
 enddef
 
 export def Delete(path: string): void
