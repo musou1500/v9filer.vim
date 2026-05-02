@@ -38,11 +38,27 @@ Entries may include a suffix indicating their type:
     `@`  symbolic link
     `*`  executable file
 
-When the displayed directory is inside a Git repository, entries with changes
-show a short status marker after the entry name and type suffix. File entries
-show `[~]` for edited files and `[+]` for created files. Directory entries
-show `[*]` when at least one file below that directory has changed; the exact
-change kind is not shown for directories.
+When the displayed directory is inside a Git repository, the header and entries
+with changes show a short status marker after the path, entry name, and type
+suffix:
+
+    `[N]`  new or untracked
+    `[M]`  modified
+    `[D]`  deleted below this directory
+    `[C]`  merge conflict
+
+Directory entries and the header show the strongest status found below that
+directory, so a directory containing both modified and conflicted files shows
+`[C]`. Deleted files cannot appear as file entries because they no longer
+exist in the filesystem, but their parent directories and the header still show
+`[D]`.
+
+Symbolic links are matched by the link path reported by Git. The link target is
+not resolved for Git status, so a symlink shows the status of the link itself
+and does not inherit changes from its target.
+
+Paths used for Git status matching are normalized to absolute paths with
+trailing slashes removed. Symlinks are not resolved during this normalization.
 
 The filer highlights the header, directories, suffixes, hidden entries, help
 text, and empty directory placeholders by default. Optional Nerd Font icons
@@ -223,8 +239,10 @@ The default highlight links and colors are:
     V9FilerDirectory       -> Directory
     V9FilerFile            -> Normal
     V9FilerMarker          -> Special
-    V9FilerGitChanged      cterm=bold gui=bold ctermfg=179 guifg=#C89B5A
-    V9FilerGitAdded        cterm=bold gui=bold ctermfg=108 guifg=#7FAF7F
+    V9FilerGitModified     cterm=bold gui=bold ctermfg=179 guifg=#C89B5A
+    V9FilerGitNew          cterm=bold gui=bold ctermfg=108 guifg=#7FAF7F
+    V9FilerGitDeleted      cterm=bold gui=bold ctermfg=203 guifg=#D75F5F
+    V9FilerGitConflict     cterm=bold gui=bold ctermfg=197 guifg=#FF005F
     V9FilerIconDirectory   -> Directory
     V9FilerIconFile        -> Normal
     V9FilerIconExecutable  -> Statement
@@ -286,6 +304,11 @@ Compared to earlier releases:
 - `name`, `extension`, `path`, `path_glob`, and `path_pattern` were removed
   from Nerd Font icon rule conditions. Use `name_pattern` to match entry
   names with a Vim regular expression.
+
+- Git status markers changed from `[+]`, `[~]`, and `[*]` to the color-coded
+  `[N]`, `[M]`, `[D]`, and `[C]` markers. The highlight groups were also split
+  into `V9FilerGitNew`, `V9FilerGitModified`,
+  `V9FilerGitDeleted`, and `V9FilerGitConflict`.
 
 ==============================================================================
 vim:tw=78:ts=8:ft=help:norl:

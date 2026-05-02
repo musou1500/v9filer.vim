@@ -30,8 +30,10 @@ export def Refresh(): void
       files: [],
       hidden: [],
       markers: [],
-      git_added_statuses: [],
-      git_changed_statuses: [],
+      git_new_statuses: [],
+      git_modified_statuses: [],
+      git_deleted_statuses: [],
+      git_conflict_statuses: [],
       icons: {},
       symlinks: [],
       executables: [],
@@ -39,7 +41,9 @@ export def Refresh(): void
     },
   }
 
-  AddHeader(view)
+  var git_status = git.StatusFor(state.Root())
+
+  AddHeader(view, git_status)
 
   if state.HelpEnabled()
     AddHelp(view)
@@ -51,7 +55,7 @@ export def Refresh(): void
     0,
     state.ShowHidden(),
     state.Expanded(),
-    git.StatusFor(state.Root())
+    git_status
   )
   if view.entry_count == 0
     AddEmptyLine(view)
@@ -73,10 +77,21 @@ def Flush(view: dict<any>): void
   winrestview(saved_view)
 enddef
 
-def AddHeader(view: dict<any>): void
+def AddHeader(view: dict<any>, git_status: dict<any>): void
   var header_text = fnamemodify(fs.Normalize(state.Root()), ':~')
-  add(view.lines, header_text)
-  add(view.highlight_positions.breadcrumb, [len(view.lines), 1, strlen(header_text)])
+  var lnum = len(view.lines) + 1
+  var text = header_text
+  var root_status = git.EntryStatus(git_status, state.Root(), true)
+  if !empty(root_status)
+    text ..= ' ' .. root_status.label
+    add(GitStatusHighlightGroup(view, get(root_status, 'kind', '')), [
+      lnum,
+      strlen(header_text) + 2,
+      strlen(root_status.label),
+    ])
+  endif
+  add(view.lines, text)
+  add(view.highlight_positions.breadcrumb, [lnum, 1, strlen(header_text)])
 enddef
 
 def AddHelp(view: dict<any>): void
@@ -195,14 +210,18 @@ def AddEntry(
   endif
 
   # git status
-  var git_status_kind = git.KindFor(git_status, entry.path, entry.is_dir)
-  if !empty(git_status_kind)
-    var git_status_text = git_status_kind ==# 'added'
-      ? '[+]'
-      : git_status_kind ==# 'changed' ? '[~]' : '[*]'
-    var git_status_group = git_status_kind ==# 'added'
-      ? view.highlight_positions.git_added_statuses
-      : view.highlight_positions.git_changed_statuses
+  var entry_git_status = git.EntryStatus(
+    git_status,
+    entry.path,
+    entry.is_dir,
+    get(entry, 'is_symlink', false)
+  )
+  if !empty(entry_git_status)
+    var git_status_text = entry_git_status.label
+    var git_status_group = GitStatusHighlightGroup(
+      view,
+      get(entry_git_status, 'kind', '')
+    )
     text ..= ' '
     col += 1
     add(git_status_group, [lnum, col, strlen(git_status_text)])
@@ -230,8 +249,10 @@ def ApplyHighlights(view: dict<any>): void
   AddMatch('V9FilerDirectory', positions.directories, 10)
   AddMatch('V9FilerFile', positions.files, 10)
   AddMatch('V9FilerMarker', positions.markers, 11)
-  AddMatch('V9FilerGitChanged', positions.git_changed_statuses, 12)
-  AddMatch('V9FilerGitAdded', positions.git_added_statuses, 12)
+  AddMatch('V9FilerGitModified', positions.git_modified_statuses, 12)
+  AddMatch('V9FilerGitNew', positions.git_new_statuses, 12)
+  AddMatch('V9FilerGitDeleted', positions.git_deleted_statuses, 12)
+  AddMatch('V9FilerGitConflict', positions.git_conflict_statuses, 12)
   for [group, icon_positions] in items(positions.icons)
     AddMatch(group, icon_positions, 11)
   endfor
@@ -246,8 +267,10 @@ def EnsureHighlightGroups(): void
   highlight default link V9FilerDirectory Directory
   highlight default link V9FilerFile Normal
   highlight default link V9FilerMarker Special
-  highlight default V9FilerGitChanged cterm=bold gui=bold ctermfg=179 guifg=#C89B5A
-  highlight default V9FilerGitAdded cterm=bold gui=bold ctermfg=108 guifg=#7FAF7F
+  highlight default V9FilerGitModified cterm=bold gui=bold ctermfg=179 guifg=#C89B5A
+  highlight default V9FilerGitNew cterm=bold gui=bold ctermfg=108 guifg=#7FAF7F
+  highlight default V9FilerGitDeleted cterm=bold gui=bold ctermfg=203 guifg=#D75F5F
+  highlight default V9FilerGitConflict cterm=bold gui=bold ctermfg=197 guifg=#FF005F
   highlight default link V9FilerIconDirectory Directory
   highlight default link V9FilerIconExecutable Statement
   highlight default link V9FilerIconFile Normal
@@ -266,6 +289,19 @@ def IconHighlightGroup(color: string, fallback: string): string
   var group = 'V9FilerIconColor' .. tolower(strpart(color, 1))
   execute 'highlight ' .. group .. ' guifg=' .. color
   return group
+enddef
+
+def GitStatusHighlightGroup(view: dict<any>, kind: string): list<list<number>>
+  if kind ==# 'new'
+    return view.highlight_positions.git_new_statuses
+  endif
+  if kind ==# 'deleted'
+    return view.highlight_positions.git_deleted_statuses
+  endif
+  if kind ==# 'conflict'
+    return view.highlight_positions.git_conflict_statuses
+  endif
+  return view.highlight_positions.git_modified_statuses
 enddef
 
 export def ClearHighlights(): void
