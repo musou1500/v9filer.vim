@@ -37,13 +37,12 @@ const NerdFontBuiltinRules: list<dict<any>> = [
 
 const NerdFontTypeFallbacks: dict<dict<string>> = {
   directory: {text: ' ', color: '#7EB7E6'},
-  symlink: {text: ' ', color: '#D08770'},
   executable: {text: ' ', color: '#89E051'},
   file: {text: ' ', color: '#C0C0C0'},
 }
 
 const EmptyIcon: dict<string> = {text: '', color: '', kind: ''}
-const BoolConditionKeys: list<string> = ['is_dir', 'is_symlink', 'is_executable']
+const BoolConditionKeys: list<string> = ['is_dir', 'is_executable']
 
 export def Resolve(entry: dict<any>): dict<string>
   if !IconsEnabled()
@@ -112,7 +111,6 @@ def EntryFacts(entry: dict<any>): dict<any>
     name: name,
     kind: EntryKind(entry),
     is_dir: get(entry, 'is_dir', false) ? true : false,
-    is_symlink: get(entry, 'is_symlink', false) ? true : false,
     is_executable: get(entry, 'is_executable', false) ? true : false,
   }
 enddef
@@ -162,9 +160,6 @@ enddef
 def EntryKind(entry: dict<any>): string
   if entry.is_dir
     return 'directory'
-  endif
-  if get(entry, 'is_symlink', false)
-    return 'symlink'
   endif
   if get(entry, 'is_executable', false)
     return 'executable'

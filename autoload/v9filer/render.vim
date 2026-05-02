@@ -9,7 +9,6 @@ const IconHighlightGroups: dict<string> = {
   directory: 'V9FilerIconDirectory',
   executable: 'V9FilerIconExecutable',
   file: 'V9FilerIconFile',
-  symlink: 'V9FilerIconSymlink',
 }
 
 # Rendering is staged through a view dictionary: collect the text lines and
@@ -124,13 +123,15 @@ def AddEntry(
     icon: dict<string>,
     git_status: dict<any>
   ): void
-  # Entry lines are composed as: indent + marker + icon + name + type suffix + git status.
+  # Entry lines are composed as: indent + marker + icon + name + type suffixes + git status.
   # Examples without an icon:
   #   1. "- src/"        expanded directory at depth 0. the marker is '- '.
   #   2. "  app.vim"     file at depth 0; the marker is two alignment spaces
   #   3. "      app.vim" file at depth 2; indent is four spaces, marker is two alignment spaces
   #   4. "    run*"      executable at depth 1. the suffix is '*'. marker is two alignment spaces.
   #   5. "    link@"     symlink at depth 1. the suffix is '@'. marker is two alignment spaces.
+  #   6. "+ link/@"      symlink directory at depth 0. suffixes are '/' and '@'.
+  #   7. "    link@*"    symlink to executable at depth 1. suffixes are '@' and '*'.
 
   var lnum = len(view.lines) + 1
   var text = ''
@@ -178,19 +179,20 @@ def AddEntry(
   col += name_width
 
   # suffix
-  var suffix = ''
   if entry.is_dir
-    suffix = '/'
-  elseif get(entry, 'is_symlink', false)
-    suffix = '@'
-    add(view.highlight_positions.symlinks, [lnum, col, strlen(suffix)])
-  else
-    suffix = get(entry, 'is_executable', false) ? '*' : ''
-    if get(entry, 'is_executable', false)
-      add(view.highlight_positions.executables, [lnum, col, strlen(suffix)])
-    endif
+    text ..= '/'
+    col += 1
   endif
-  text ..= suffix
+  if get(entry, 'is_symlink', false)
+    add(view.highlight_positions.symlinks, [lnum, col, 1])
+    text ..= '@'
+    col += 1
+  endif
+  if !entry.is_dir && get(entry, 'is_executable', false)
+    add(view.highlight_positions.executables, [lnum, col, 1])
+    text ..= '*'
+    col += 1
+  endif
 
   # git status
   var git_status_kind = git.KindFor(git_status, entry.path, entry.is_dir)
@@ -201,9 +203,11 @@ def AddEntry(
     var git_status_group = git_status_kind ==# 'added'
       ? view.highlight_positions.git_added_statuses
       : view.highlight_positions.git_changed_statuses
-    col += strlen(suffix) + 1
+    text ..= ' '
+    col += 1
     add(git_status_group, [lnum, col, strlen(git_status_text)])
-    text ..= ' ' .. git_status_text
+    text ..= git_status_text
+    col += strlen(git_status_text)
   endif
 
   # apply built text and highlights to view
@@ -247,7 +251,6 @@ def EnsureHighlightGroups(): void
   highlight default link V9FilerIconDirectory Directory
   highlight default link V9FilerIconExecutable Statement
   highlight default link V9FilerIconFile Normal
-  highlight default link V9FilerIconSymlink Special
   highlight default link V9FilerSymlink Special
   highlight default link V9FilerExecutable Statement
   highlight default link V9FilerHidden Comment

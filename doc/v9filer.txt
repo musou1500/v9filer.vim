@@ -34,7 +34,7 @@ Hidden files (dotfiles) are shown by default.
 The header shows the current root path compactly, using `~` for the home
 directory when applicable.
 
-File entries may include a suffix indicating their type:
+Entries may include a suffix indicating their type:
     `@`  symbolic link
     `*`  executable file
 
@@ -167,8 +167,8 @@ Other ~
     A Nerd Font compatible font is required. Icons are chosen from built-in
     filename pattern rules, plus any rules configured by
     |g:v9filer_nerd_font_icon_rules|. When no rule matches, v9filer falls
-    back to a default icon for the entry kind: directory, symlink,
-    executable file, or regular file.
+    back to a default icon for the entry kind: directory, executable file, or
+    regular file.
 
     When set to |false|, Nerd Font icons are not displayed, even if custom
     rules are configured.
@@ -186,7 +186,7 @@ Other ~
     pattern rules. If no rule matches, v9filer falls back to the
     default icon for the entry kind. Rule conditions are combined with AND.
 
-    Supported condition keys are `name_pattern`, `is_dir`, `is_symlink`, and
+    Supported condition keys are `name_pattern`, `is_dir`, and
     `is_executable`. The `name_pattern` condition is a Vim regular expression
     matched case-sensitively against the entry name, not the full path. Use a
     `color` value to change colors for specific name patterns.
@@ -225,7 +225,6 @@ The default highlight links and colors are:
     V9FilerIconDirectory   -> Directory
     V9FilerIconFile        -> Normal
     V9FilerIconExecutable  -> Statement
-    V9FilerIconSymlink     -> Special
     V9FilerSymlink         -> Special
     V9FilerExecutable      -> Statement
     V9FilerHidden          -> Comment
@@ -277,6 +276,9 @@ Compared to earlier releases:
 - `name_lc` was removed from Nerd Font icon rule conditions. Use
   `name_pattern` and list each filename variant explicitly when different
   cases should match.
+
+- `is_symlink` was removed from Nerd Font icon rule conditions. Use
+  `name_pattern` when symlink entries need custom icon rules.
 
 - `name`, `extension`, `path`, `path_glob`, and `path_pattern` were removed
   from Nerd Font icon rule conditions. Use `name_pattern` to match entry
