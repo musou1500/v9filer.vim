@@ -38,20 +38,19 @@ Entries may include a suffix indicating their type:
     `@`  symbolic link
     `*`  executable file
 
-When the displayed directory is inside a Git repository, the header and entries
-with changes show a short status marker after the path, entry name, and type
-suffix:
+When the displayed directory is inside a Git repository, entries with changes
+show a short status marker after the entry name and type suffix:
 
     `[N]`  new or untracked
     `[M]`  modified
-    `[D]`  deleted below this directory
+    `[D]`  deleted
     `[!]`  merge conflict
+    `[*]`  directory with changes
 
-Directory entries and the header show the strongest status found below that
-directory, so a directory containing both modified and conflicted files shows
-`[!]`. Deleted files cannot appear as file entries because they no longer
-exist in the filesystem, but their parent directories and the header still show
-`[D]`.
+Directory entries show `[*]` when the directory itself or anything below it has
+changes. The root directory in the header does not show a Git status marker.
+Deleted files cannot appear as file entries because they no longer exist in the
+filesystem, but their parent directories still show `[*]`.
 
 Symbolic links are matched by the link path reported by Git. The link target is
 not resolved for Git status, so a symlink shows the status of the link itself
@@ -307,10 +306,11 @@ Compared to earlier releases:
   from Nerd Font icon rule conditions. Use `name_pattern` to match entry
   names with a Vim regular expression.
 
-- Git status markers changed from `[+]`, `[~]`, and `[*]` to the color-coded
-  `[N]`, `[M]`, `[D]`, and `[!]` markers. The highlight groups were also split
-  into `V9FilerGitNew`, `V9FilerGitModified`,
-  `V9FilerGitDeleted`, and `V9FilerGitConflict`.
+- Git status markers changed from `[+]`, `[~]`, and `[*]` to color-coded
+  `[N]`, `[M]`, `[D]`, `[!]`, and `[*]` markers. The highlight groups were also
+  split into `V9FilerGitNew`, `V9FilerGitModified`,
+  `V9FilerGitDeleted`, `V9FilerGitConflict`, and
+  `V9FilerGitDirectoryChanged`.
 
 ==============================================================================
 vim:tw=78:ts=8:ft=help:norl:

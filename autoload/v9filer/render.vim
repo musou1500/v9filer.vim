@@ -34,6 +34,7 @@ export def Refresh(): void
       git_modified_statuses: [],
       git_deleted_statuses: [],
       git_conflict_statuses: [],
+      git_directory_statuses: [],
       icons: {},
       symlinks: [],
       executables: [],
@@ -41,7 +42,7 @@ export def Refresh(): void
     },
   }
 
-  var git_status = git.StatusFor(state.Root())
+  var git_status = git.Status(state.Root())
 
   AddHeader(view, git_status)
 
@@ -81,16 +82,6 @@ def AddHeader(view: dict<any>, git_status: dict<any>): void
   var header_text = fnamemodify(fs.Normalize(state.Root()), ':~')
   var lnum = len(view.lines) + 1
   var text = header_text
-  var root_status_kind = git.KindFor(git_status, state.Root(), true)
-  if !empty(root_status_kind)
-    var root_status_label = GitStatusLabel(root_status_kind)
-    text ..= ' ' .. root_status_label
-    add(GitStatusHighlightGroup(view, root_status_kind), [
-      lnum,
-      strlen(header_text) + 2,
-      strlen(root_status_label),
-    ])
-  endif
   add(view.lines, text)
   add(view.highlight_positions.breadcrumb, [lnum, 1, strlen(header_text)])
 enddef
@@ -211,23 +202,27 @@ def AddEntry(
   endif
 
   # git status
-  var git_status_kind = git.KindFor(
-    git_status,
-    entry.path,
-    entry.is_dir,
-    get(entry, 'is_symlink', false)
-  )
-  if !empty(git_status_kind)
-    var git_status_text = GitStatusLabel(git_status_kind)
-    var git_status_group = GitStatusHighlightGroup(
-      view,
-      git_status_kind
-    )
+  if entry.is_dir
+      && (has_key(git_status.paths, entry.path)
+        || get(git_status.directories, entry.path, false))
+    var label = '[*]'
     text ..= ' '
     col += 1
-    add(git_status_group, [lnum, col, strlen(git_status_text)])
-    text ..= git_status_text
-    col += strlen(git_status_text)
+    add(view.highlight_positions.git_directory_statuses, [lnum, col, strlen(label)])
+    text ..= '[*]'
+    col += strlen(label)
+  elseif !entry.is_dir && has_key(git_status.paths, entry.path)
+    var label = {
+      'new': '[N]',
+      'modified': '[M]',
+      'deleted': '[D]',
+      'conflict': '[!]',
+    }[git_status.paths[entry.path]]
+    text ..= ' '
+    col += 1
+    add(GitStatusHighlightGroup(view, git_status.paths[entry.path]), [lnum, col, strlen(label)])
+    text ..= label
+    col += strlen(label)
   endif
 
   # apply built text and highlights to view
@@ -250,6 +245,7 @@ def ApplyHighlights(view: dict<any>): void
   AddMatch('V9FilerDirectory', positions.directories, 10)
   AddMatch('V9FilerFile', positions.files, 10)
   AddMatch('V9FilerMarker', positions.markers, 11)
+  AddMatch('V9FilerGitDirectoryChanged', positions.git_directory_statuses, 12)
   AddMatch('V9FilerGitModified', positions.git_modified_statuses, 12)
   AddMatch('V9FilerGitNew', positions.git_new_statuses, 12)
   AddMatch('V9FilerGitDeleted', positions.git_deleted_statuses, 12)
@@ -268,6 +264,7 @@ def EnsureHighlightGroups(): void
   highlight default link V9FilerDirectory Directory
   highlight default link V9FilerFile Normal
   highlight default link V9FilerMarker Special
+  highlight default V9FilerGitDirectoryChanged cterm=bold gui=bold ctermfg=179 guifg=#C89B5A
   highlight default V9FilerGitModified cterm=bold gui=bold ctermfg=179 guifg=#C89B5A
   highlight default V9FilerGitNew cterm=bold gui=bold ctermfg=108 guifg=#7FAF7F
   highlight default V9FilerGitDeleted cterm=bold gui=bold ctermfg=203 guifg=#D75F5F
