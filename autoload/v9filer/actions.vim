@@ -29,6 +29,7 @@ export def GoParent(): void
   ChangeRoot(fs.Parent(state.Root()))
 enddef
 
+
 export def OpenVertical(): void
   OpenPath('vertical')
 enddef
