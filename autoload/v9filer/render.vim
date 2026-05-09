@@ -4,6 +4,7 @@ import './state.vim' as state
 import './fs.vim' as fs
 import './git.vim' as git
 import './icons.vim' as icons
+import './working_files.vim' as working_files
 
 const IconHighlightGroups: dict<string> = {
   directory: 'V9FilerIconDirectory',
@@ -22,6 +23,7 @@ export def Refresh(): void
   var view = {
     lines: [],
     line_paths: {},
+    working_file_lines: {},
     entry_count: 0,
     highlight_positions: {
       breadcrumb: [],
@@ -39,16 +41,20 @@ export def Refresh(): void
       symlinks: [],
       executables: [],
       empty_lines: [],
+      working_files_header: [],
+      working_files_paths: [],
     },
   }
 
   var git_status = git.Status(state.Root())
 
-  AddHeader(view, git_status)
-
   if state.HelpEnabled()
     AddHelp(view)
   endif
+
+  AddWorkingFilesSection(view, state.Root(), git_status)
+
+  AddHeader(view, git_status)
 
   try
     AddDirectoryTree(
@@ -72,6 +78,7 @@ enddef
 
 def Flush(view: dict<any>): void
   state.SetLinePaths(view.line_paths)
+  state.SetWorkingFileLines(view.working_file_lines)
 
   var saved_view = winsaveview()
   setlocal modifiable
@@ -92,10 +99,173 @@ def AddHeader(view: dict<any>, git_status: dict<any>): void
 enddef
 
 def AddHelp(view: dict<any>): void
-  var help_text = '? help | <CR> open/toggle | l enter | - parent | . hidden | R refresh | q close'
+  var help_text = '? help | <CR> open/toggle | l enter | - parent | x remove | . hidden | R refresh | q close'
   add(view.lines, help_text)
   add(view.highlight_positions.help, [len(view.lines), 1, strlen(help_text)])
   add(view.lines, '')
+enddef
+
+def AddWorkingFilesSection(
+    view: dict<any>,
+    root: string,
+    git_status: dict<any>
+  ): void
+  var files = working_files.List()
+  if empty(files)
+    return
+  endif
+
+  if !empty(view.lines) && view.lines[-1] !=# ''
+    add(view.lines, '')
+  endif
+
+  var heading = 'Working Files'
+  add(view.lines, heading)
+  add(view.highlight_positions.working_files_header,
+    [len(view.lines), 1, strlen(heading)])
+
+  for path in files
+    AddWorkingFileEntry(view, path, root, git_status)
+  endfor
+
+  add(view.lines, '')
+enddef
+
+def AddWorkingFileEntry(
+    view: dict<any>,
+    path: string,
+    root: string,
+    git_status: dict<any>
+  ): void
+  # Working file lines are: alignment + icon + name + suffixes + path + git status.
+  # The two-space alignment matches the marker width used by file rows in the
+  # tree section so the icon column lines up vertically.
+  var name = fnamemodify(path, ':t')
+  var is_symlink = getftype(path) ==# 'link'
+  var is_executable = !isdirectory(path) && executable(path) > 0
+  var icon = icons.Resolve({
+    name: name,
+    is_dir: false,
+    is_symlink: is_symlink,
+    is_executable: is_executable,
+  })
+
+  var lnum = len(view.lines) + 1
+  var text = ''
+  var col = 1
+
+  # alignment (matches file marker width in the tree)
+  text ..= '  '
+  col += 2
+
+  # icon
+  var icon_text = icon.text
+  var icon_width = strlen(icon_text)
+  text ..= icon_text
+  if icon_width > 0
+    var icon_group = IconHighlightGroup(
+      get(icon, 'color', ''),
+      get(IconHighlightGroups, get(icon, 'kind', 'file'), 'V9FilerIconFile')
+    )
+    if !has_key(view.highlight_positions.icons, icon_group)
+      view.highlight_positions.icons[icon_group] = []
+    endif
+    add(view.highlight_positions.icons[icon_group], [lnum, col, icon_width])
+  endif
+  col += icon_width
+
+  # name
+  var name_width = strlen(name)
+  text ..= name
+  add(view.highlight_positions.files, [lnum, col, name_width])
+  if name =~# '^\.'
+    add(view.highlight_positions.hidden, [lnum, col, name_width])
+  endif
+  col += name_width
+
+  # symlink suffix
+  if is_symlink
+    add(view.highlight_positions.symlinks, [lnum, col, 1])
+    text ..= '@'
+    col += 1
+  endif
+
+  # executable suffix
+  if is_executable
+    add(view.highlight_positions.executables, [lnum, col, 1])
+    text ..= '*'
+    col += 1
+  endif
+
+  # separator
+  text ..= ' '
+  col += 1
+
+  # git status
+  if has_key(git_status.paths, path)
+    var label = GitStatusLabel(git_status.paths[path])
+    add(GitStatusHighlightGroup(view, git_status.paths[path]),
+      [lnum, col, strlen(label)])
+    text ..= label
+    col += strlen(label)
+    text ..= ' '
+    col += 1
+  endif
+
+  # parent directory path; the shorter of (a) relative-from-root (with ../ for
+  # outside-root files) and (b) absolute path with ~ for home.
+  var rel = ParentDisplay(fs.Parent(path), root)
+  if !empty(rel)
+    add(view.highlight_positions.working_files_paths, [lnum, col, strlen(rel)])
+    text ..= rel
+    col += strlen(rel)
+  endif
+
+  add(view.lines, text)
+  view.line_paths[string(lnum)] = path
+  view.working_file_lines[string(lnum)] = true
+enddef
+
+def ParentDisplay(parent: string, root: string): string
+  if parent ==# root
+    return ''
+  endif
+  var rel = RelativeWithDotDot(parent, root)
+  var abs = fnamemodify(parent, ':~')
+  if !empty(rel) && strlen(rel) <= strlen(abs)
+    return rel
+  endif
+  return abs
+enddef
+
+def RelativeWithDotDot(target: string, root: string): string
+  if target ==# root
+    return ''
+  endif
+  if root ==# '/'
+    return target[1 :]
+  endif
+  var prefix = root .. '/'
+  if stridx(target, prefix) == 0
+    return target[strlen(prefix) :]
+  endif
+
+  # target is outside root: walk up to a common ancestor and back down.
+  var target_parts = split(target, '/')
+  var root_parts = split(root, '/')
+  var common = 0
+  while common < len(target_parts)
+        && common < len(root_parts)
+        && target_parts[common] ==# root_parts[common]
+    common += 1
+  endwhile
+  var ups = len(root_parts) - common
+  var down_parts = target_parts[common :]
+  var ups_str = repeat('../', ups)
+  if empty(down_parts)
+    return substitute(ups_str, '/$', '', '')
+  endif
+  return ups_str .. join(down_parts, '/')
 enddef
 
 def AddEmptyLine(view: dict<any>): void
@@ -262,6 +432,8 @@ def ApplyHighlights(view: dict<any>): void
   AddMatch('V9FilerExecutable', positions.executables, 12)
   AddMatch('V9FilerHidden', positions.hidden, 13)
   AddMatch('V9FilerEmpty', positions.empty_lines, 10)
+  AddMatch('V9FilerWorkingFilesHeader', positions.working_files_header, 10)
+  AddMatch('V9FilerWorkingFilesPath', positions.working_files_paths, 10)
 enddef
 
 def EnsureHighlightGroups(): void
@@ -282,6 +454,8 @@ def EnsureHighlightGroups(): void
   highlight default link V9FilerHidden Comment
   highlight default link V9FilerHelp Comment
   highlight default link V9FilerEmpty Comment
+  highlight default link V9FilerWorkingFilesHeader Title
+  highlight default link V9FilerWorkingFilesPath Comment
 enddef
 
 def IconHighlightGroup(color: string, fallback: string): string

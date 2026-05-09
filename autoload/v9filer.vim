@@ -1,9 +1,11 @@
 vim9script
 
 import './v9filer/state.vim' as state
+import './v9filer/tab_state.vim' as tab_state
 import './v9filer/fs.vim' as fs
 import './v9filer/render.vim' as render
 import './v9filer/actions.vim' as actions
+import './v9filer/working_files.vim' as working_files
 
 export def CurrentFileDir(): string
   var path = expand('%:p:h')
@@ -14,8 +16,8 @@ export def Open(args: string = ''): void
   var root = fs.Normalize(empty(args) ? getcwd() : args)
   RememberFocusWindow()
 
-  if exists('t:v9filer_buf') && bufexists(t:v9filer_buf)
-    var win = bufwinnr(t:v9filer_buf)
+  if tab_state.HasBuf()
+    var win = bufwinnr(tab_state.Buf())
     if win != -1
       win_gotoid(win_getid(win))
       close
@@ -24,15 +26,15 @@ export def Open(args: string = ''): void
   endif
 
   var width = get(g:, 'v9filer_width', 30)
-  t:v9filer_opening = true
+  tab_state.SetOpening(true)
   try
     topleft vertical new
   finally
-    unlet! t:v9filer_opening
+    tab_state.SetOpening(false)
   endtry
   execute 'vertical resize ' .. width
   setlocal winfixwidth
-  t:v9filer_buf = bufnr('%')
+  tab_state.SetBuf(bufnr('%'))
   SetupBuffer(root)
 enddef
 
@@ -47,9 +49,31 @@ export def AutoReveal(): void
 enddef
 
 export def RememberFocusWindow(): void
-  if !get(t:, 'v9filer_opening', false) && !IsFilerBuffer()
-    t:v9filer_last_focus_winid = win_getid()
+  if !tab_state.IsOpening() && !IsFilerBuffer()
+    tab_state.SetLastFocusWinid(win_getid())
   endif
+enddef
+
+export def OnBufWinEnter(): void
+  working_files.HandleBufWinEnter()
+  RefreshFilerIfVisible()
+enddef
+
+def RefreshFilerIfVisible(): void
+  if !tab_state.HasBuf()
+    return
+  endif
+  var winnr = bufwinnr(tab_state.Buf())
+  if winnr == -1
+    return
+  endif
+  var current = win_getid()
+  win_gotoid(win_getid(winnr))
+  try
+    render.Refresh()
+  finally
+    win_gotoid(current)
+  endtry
 enddef
 
 def OpenInNewTab(): void
@@ -104,12 +128,13 @@ def DefineBufferMappings(): void
   nnoremap <buffer><silent> . <ScriptCmd>actions.ToggleHidden()<CR>
   nnoremap <buffer><silent> R <ScriptCmd>actions.Refresh()<CR>
   nnoremap <buffer><silent> y <ScriptCmd>actions.YankPath()<CR>
+  nnoremap <buffer><silent> x <ScriptCmd>actions.RemoveWorkingFile()<CR>
   nnoremap <buffer><silent> ? <ScriptCmd>actions.ToggleHelp()<CR>
   nnoremap <buffer><silent> q <ScriptCmd>actions.Close()<CR>
 enddef
 
 def Reveal(silent: bool): void
-  if !exists('t:v9filer_buf') || !bufexists(t:v9filer_buf)
+  if !tab_state.HasBuf()
     return
   endif
 
@@ -119,7 +144,7 @@ def Reveal(silent: bool): void
   endif
   target = fs.Normalize(target)
 
-  var filer_win = bufwinnr(t:v9filer_buf)
+  var filer_win = bufwinnr(tab_state.Buf())
   if filer_win == -1
     return
   endif

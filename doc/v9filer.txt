@@ -6,8 +6,9 @@ CONTENTS                                                    *v9filer-contents*
     1. Introduction ................................. |v9filer|
     2. Commands ..................................... |v9filer-commands|
     3. Mappings ..................................... |v9filer-mappings|
-    4. Configuration ................................ |v9filer-config|
-    5. Breaking Changes ............................. |v9filer-breaking|
+    4. Working Files ................................ |v9filer-working-files|
+    5. Configuration ................................ |v9filer-config|
+    6. Breaking Changes ............................. |v9filer-breaking|
 
 ==============================================================================
 1. Introduction                                                      *v9filer*
@@ -145,12 +146,48 @@ Other ~
 
     y       Copy the path under the cursor to the `+` and `"` registers.
 
+    x       On a Working Files row, remove the entry from the list and close
+            any window in the current tab that displays that file. On other
+            rows the mapping does nothing.
+
     ?       Toggle the quick-help header at the top of the buffer.
 
     q       Close the sidebar window.
 
 ==============================================================================
-4. Configuration                                              *v9filer-config*
+4. Working Files                                        *v9filer-working-files*
+
+The sidebar shows a per-tab "Working Files" list above the directory tree.
+Files opened inside the current tab (in any non-filer window) are appended to
+the list automatically, so frequently visited files stay one keystroke away
+without having to expand the tree again.
+
+Each row shows:
+
+    icon | name | type suffix (`@` / `*`) | git status | parent path
+
+The parent path locates the file's directory so that two files sharing a
+basename remain distinguishable. v9filer picks whichever form is shorter:
+
+    - the parent directory relative to the sidebar root (using `../` when the
+      file is outside the root)
+    - the absolute parent directory (with `~` substituted for `$HOME` when
+      applicable)
+
+Files at the sidebar root show no parent path. The git status marker uses the
+same `[N]` / `[M]` / `[D]` / `[!]` labels as the tree.
+
+The list survives root changes; entries simply re-render their parent path
+against the new root. Files that no longer exist on disk are hidden from the
+list automatically.
+
+Press `x` on a Working Files row to remove the entry from the list. Any window
+in the current tab displaying that file is closed at the same time. Other
+mappings (`<CR>`, `v`, `s`, `t`, `y`) work on Working Files rows just like on
+tree rows.
+
+==============================================================================
+5. Configuration                                              *v9filer-config*
 
 *g:v9filer_show_hidden*
     When set to |true|, hidden files (dotfiles) are shown by default.
@@ -248,6 +285,8 @@ The default highlight links and colors are:
     V9FilerHidden          -> Comment
     V9FilerHelp            -> Comment
     V9FilerEmpty           -> Comment
+    V9FilerWorkingFilesHeader -> Title
+    V9FilerWorkingFilesPath   -> Comment
 
 When |g:v9filer_nerd_font_icons| is enabled, icons are highlighted by entry
 kind by default. Built-in rules, fallback icons, and
@@ -263,7 +302,7 @@ public highlight interface do not grow for every filename or extension.
 <
 
 ==============================================================================
-5. Breaking Changes                                          *v9filer-breaking*
+6. Breaking Changes                                          *v9filer-breaking*
 
 Compared to earlier releases:
 

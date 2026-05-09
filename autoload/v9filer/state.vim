@@ -6,6 +6,10 @@ vim9script
 #   show_hidden: bool,   # whether dotfiles are listed
 #   expanded: dict<bool>, # absolute directory path -> expanded
 #   line_paths: dict<string>, # 1-based buffer line number as string -> path
+#   working_file_lines: dict<bool>, # 1-based line number (string) -> true; marks
+#                                   # which lines belong to the working files
+#                                   # section so that section-only actions can
+#                                   # tell tree rows from working file rows.
 #   help: bool,          # whether the quick-help rows are visible
 # }
 export def New(root: string): dict<any>
@@ -14,6 +18,7 @@ export def New(root: string): dict<any>
     show_hidden: get(g:, 'v9filer_show_hidden', true),
     expanded: {},
     line_paths: {},
+    working_file_lines: {},
     help: false,
   }
 enddef
@@ -85,6 +90,14 @@ enddef
 
 export def PathForLine(line_number: number): string
   return get(get(Get(), 'line_paths', {}), string(line_number), '')
+enddef
+
+export def SetWorkingFileLines(lines: dict<any>): void
+  Patch({working_file_lines: lines})
+enddef
+
+export def IsWorkingFileLine(line_number: number): bool
+  return get(get(Get(), 'working_file_lines', {}), string(line_number), false)
 enddef
 
 export def Patch(changes: dict<any>): dict<any>

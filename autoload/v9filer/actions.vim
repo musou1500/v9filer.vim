@@ -1,8 +1,10 @@
 vim9script
 
 import './state.vim' as state
+import './tab_state.vim' as tab_state
 import './fs.vim' as fs
 import './render.vim' as render
+import './working_files.vim' as working_files
 
 export def OpenOrToggle(): void
   var path = PathUnderCursor()
@@ -140,10 +142,22 @@ export def ToggleHelp(): void
 enddef
 
 export def Close(): void
-  if exists('t:v9filer_buf') && t:v9filer_buf == bufnr('%')
-    unlet! t:v9filer_buf
+  if tab_state.Buf() == bufnr('%')
+    tab_state.UnsetBuf()
   endif
   close
+enddef
+
+export def RemoveWorkingFile(): void
+  if !state.IsWorkingFileLine(line('.'))
+    return
+  endif
+  var path = state.PathForLine(line('.'))
+  if empty(path)
+    return
+  endif
+  working_files.Remove(path)
+  render.Refresh()
 enddef
 
 def OpenPath(kind: string): void
@@ -185,7 +199,7 @@ enddef
 
 def MoveToTargetWindow(): void
   var filer_win = win_getid()
-  var target_win = get(t:, 'v9filer_last_focus_winid', 0)
+  var target_win = tab_state.LastFocusWinid()
 
   if target_win > 0 && target_win != filer_win && !IsFilerWindow(target_win)
     if win_gotoid(target_win)
