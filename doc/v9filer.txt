@@ -12,21 +12,14 @@ CONTENTS                                                    *v9filer-contents*
 ==============================================================================
 1. Introduction                                                      *v9filer*
 
-v9filer is a simple file explorer plugin written in Vim9 script. It displays
-directory contents as an inline expandable tree with a header showing the
-current root path, and allows navigation and basic file operations.
+v9filer is a simple file explorer plugin written in Vim9 script. It opens as
+a left-side vertical split (sidebar) showing the directory contents as an
+inline expandable tree, with a header showing the current root path. The
+sidebar can be toggled by re-running |:V9Filer|. A tab-local variable tracks
+the sidebar buffer so it is shared per tab.
 
-Two operating modes are available:
-
-embedded mode ~
-    The filer replaces the current window (like |:Explore|). Pressing <CR>
-    on a file opens it in the same window, replacing the filer.
-
-toggle mode ~
-    The filer opens as a left-side vertical split (sidebar). Pressing <CR>
-    on a file opens it in the last focused non-filer window, leaving the
-    sidebar open. A tab-local variable tracks the sidebar buffer so it can be
-    toggled.
+Pressing <CR> on a file opens it in the last focused non-filer window,
+leaving the sidebar open.
 
 Directories are listed first (with a trailing `/`), followed by files.
 Hidden files (dotfiles) are shown by default.
@@ -69,22 +62,17 @@ can be added before entry names.
 2. Commands                                                  *v9filer-commands*
 
 :V9Filer [dir]                                                      *:V9Filer*
-    Open the filer in embedded mode in the current window. If [dir] is
-    omitted, the current working directory is used.
-
-:V9Filer -toggle [dir]
-    Open the filer as a toggle sidebar. If a sidebar is already open in
-    the current tab it is closed (toggle). If [dir] is omitted, the
-    current working directory is used. The `-toggle` flag may appear
-    before or after the directory argument.
+    Open the filer as a sidebar in the current tab. If a sidebar is already
+    open in the current tab it is closed (toggle). If [dir] is omitted, the
+    current working directory is used.
 
 :Filer [...]                                                          *:Filer*
     Alias for |:V9Filer|. Accepts the same arguments.
 
 :V9FilerReveal                                                *:V9FilerReveal*
-    Expand ancestors of the current file in the toggle sidebar and move the
-    cursor to the entry. Does nothing if no toggle sidebar is open in the
-    current tab or if the current file is outside the sidebar's root.
+    Expand ancestors of the current file in the sidebar and move the cursor
+    to the entry. Does nothing if no sidebar is open in the current tab or
+    if the current file is outside the sidebar's root.
 
 ==============================================================================
 3. Mappings                                                  *v9filer-mappings*
@@ -94,11 +82,9 @@ Global mappings ~
 Unless |g:v9filer_no_default_mappings| is set, the following mappings are
 defined globally:
 
-    <Leader>ee  Open the toggle sidebar in the current working directory.
-    <Leader>eE  Open embedded filer in the current working directory.
-    <Leader>et  Open the toggle sidebar in the directory of the current file.
-    <Leader>eT  Open embedded filer in the directory of the current file.
-    <Leader>ef  Reveal the current file in the toggle sidebar.
+    <Leader>ee  Open the sidebar in the current working directory.
+    <Leader>et  Open the sidebar in the directory of the current file.
+    <Leader>ef  Reveal the current file in the sidebar.
 
 Buffer-local mappings ~
 
@@ -107,33 +93,49 @@ The following mappings are available in the filer buffer.
 Navigation ~
 
     <CR>    On a directory: toggle expand / collapse.
-            On a file (embedded mode): open it in the current window.
-            On a file (toggle mode): open it in the last focused non-filer
-            window.
+            On a file: open it in the last focused non-filer window.
 
     l       Change the root to the directory under the cursor.
 
     -       Go to the parent directory.
     <BS>    Go to the parent directory.
 
-    v       Open the file under the cursor in a vertical split. In toggle
-            mode, split from the last focused non-filer window.
-    s       Open the file under the cursor in a horizontal split. In toggle
-            mode, split from the last focused non-filer window.
+    Changing the root (l, -, <BS>, or opening a directory with v / s) also
+    sets the tab-local working directory to the new root via |:tcd|, so
+    other windows in the tab inherit the new root unless they have a
+    window-local directory set with |:lcd|.
+
+    v       Open the file under the cursor in a vertical split, splitting
+            from the last focused non-filer window.
+    s       Open the file under the cursor in a horizontal split, splitting
+            from the last focused non-filer window.
+
+    t       Open the entry under the cursor in a new tab. On a directory,
+            the new tab's working directory is set to that directory via
+            |:tcd| and a sidebar rooted at it is opened automatically. On a
+            file, the file is opened in the new tab and the tab's working
+            directory is set to its parent directory via |:tcd|.
 
 File operations ~
 
     D       Delete the file or directory under the cursor. A confirmation
-            prompt is shown before deletion.
+            prompt is shown before deletion. Deleting a regular directory
+            recursively removes its contents, and the prompt warns about
+            this. Symbolic links are removed without following the link, so
+            the link target is preserved.
 
-    r       Rename the file or directory under the cursor. An input prompt
-            is shown for the new name. If the target already exists, an
-            overwrite confirmation is shown first.
+    r       Rename or move the file or directory under the cursor. An
+            input prompt is shown, prefilled with the current basename. The
+            input may be a basename, a relative path (resolved from the
+            parent directory), or an absolute path; this can be used to
+            move the entry into another directory. If the target already
+            exists, an overwrite confirmation is shown first.
 
     %       Create a new file or directory in the current root. An input
             prompt is shown for the name. A trailing `/` creates a directory.
-            If the target already exists, an overwrite confirmation is shown
-            first.
+            If a regular file already exists at the target, an overwrite
+            confirmation is shown first; if a directory already exists, the
+            command reports it and does nothing.
 
 Other ~
 
@@ -141,17 +143,11 @@ Other ~
 
     R       Refresh the directory listing.
 
-    C       Change the current window's working directory to the displayed
-            root directory (equivalent to |:lcd|).
-
     y       Copy the path under the cursor to the `+` and `"` registers.
 
     ?       Toggle the quick-help header at the top of the buffer.
 
-    q       Close the filer.
-            Embedded mode: return to the previous buffer (or open a new
-            empty buffer if no previous buffer exists).
-            Toggle mode: close the sidebar window.
+    q       Close the sidebar window.
 
 ==============================================================================
 4. Configuration                                              *v9filer-config*
@@ -163,13 +159,13 @@ Other ~
 <
 
 *g:v9filer_width*
-    Fixed width (in columns) of the toggle sidebar window.
+    Fixed width (in columns) of the sidebar window.
     Default: 30 >
         let g:v9filer_width = 40
 <
 
 *g:v9filer_auto_reveal*
-    When set to |true|, the toggle sidebar automatically reveals the current
+    When set to |true|, the sidebar automatically reveals the current
     file when switching buffers.
     Default: false >
         let g:v9filer_auto_reveal = true
@@ -215,7 +211,7 @@ Other ~
         let g:v9filer_nerd_font_icons = true
         let g:v9filer_nerd_font_icon_rules = [
               \ {
-              \   'text': ' ',
+              \   'text': ' ',
               \   'color': '#6D8086',
               \   'when': {
               \     'name_pattern': '\.conf$',
@@ -223,7 +219,7 @@ Other ~
               \   },
               \ },
               \ {
-              \   'text': ' ',
+              \   'text': ' ',
               \   'color': '#F14E32',
               \   'when': {
               \     'name_pattern': '\v^(\.gitignore|\.gitattributes)$',
@@ -263,8 +259,7 @@ public highlight interface do not grow for every filename or extension.
     When set to |true|, the default global mappings are not defined, allowing
     you to set your own. >
         let g:v9filer_no_default_mappings = true
-        nnoremap <silent> <F3> <Cmd>V9Filer -toggle<CR>
-        nnoremap <silent> <F4> <Cmd>V9Filer<CR>
+        nnoremap <silent> <F3> <Cmd>V9Filer<CR>
 <
 
 ==============================================================================
@@ -272,18 +267,21 @@ public highlight interface do not grow for every filename or extension.
 
 Compared to earlier releases:
 
-- `:V9Filer` now opens the filer in embedded mode (current window) instead of
-  toggling a sidebar. Use `:V9Filer -toggle` for the sidebar.
+- The `C` mapping (`LcdRoot`) has been removed. Changing the root now
+  updates the tab-local working directory automatically via |:tcd|, which
+  also propagates to the editing window in the same tab.
 
-- `<Leader>ee` and `<Leader>eE` have been reassigned. `<Leader>ee` is now the
-  toggle sidebar and `<Leader>eE` is embedded. The old `<Leader>eE` behaviour
-  (toggle in `%:h`) is now `<Leader>et`.
+- Embedded mode has been removed. `:V9Filer` now always opens the sidebar
+  (toggle behaviour). The `-toggle` argument is no longer recognised; pass
+  the directory directly.
 
-- The internal tab-local variable changed from `t:v9filer_buf` to
-  `t:v9filer_toggle_buf`.
+- `<Leader>eE` and `<Leader>eT` (embedded-mode mappings) have been removed.
 
-- Buffer names changed from `v9filer://<path>` to
-  `v9filer-embedded://<path>` or `v9filer-toggle://<path>`.
+- Buffer names changed back from `v9filer-toggle://<path>` (and the dropped
+  `v9filer-embedded://<path>`) to `v9filer://<path>`.
+
+- The internal tab-local variable changed from `t:v9filer_toggle_buf` to
+  `t:v9filer_buf`.
 
 - `g:v9filer_icons` and `g:v9filer_icon_map` were removed. Use
   `g:v9filer_nerd_font_icons` to enable the built-in Nerd Font icon set.

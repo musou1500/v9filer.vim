@@ -50,14 +50,19 @@ export def Refresh(): void
     AddHelp(view)
   endif
 
-  AddDirectoryTree(
-    view,
-    state.Root(),
-    0,
-    state.ShowHidden(),
-    state.Expanded(),
-    git_status
-  )
+  try
+    AddDirectoryTree(
+      view,
+      state.Root(),
+      0,
+      state.ShowHidden(),
+      state.Expanded(),
+      git_status
+    )
+  catch
+    echoerr v:exception
+    return
+  endtry
   if view.entry_count == 0
     AddEmptyLine(view)
   endif

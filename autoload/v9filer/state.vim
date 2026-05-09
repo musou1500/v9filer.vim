@@ -3,22 +3,18 @@ vim9script
 # State is stored in b:v9filer_state for each filer buffer.
 # {
 #   root: string,        # normalized directory displayed as the tree root
-#   mode: string,        # "embedded" or "toggle"
 #   show_hidden: bool,   # whether dotfiles are listed
 #   expanded: dict<bool>, # absolute directory path -> expanded
 #   line_paths: dict<string>, # 1-based buffer line number as string -> path
 #   help: bool,          # whether the quick-help rows are visible
-#   prev_buf: number,    # buffer to restore when closing embedded mode
 # }
-export def New(root: string, mode: string, prev_buf: number): dict<any>
+export def New(root: string): dict<any>
   return {
     root: root,
-    mode: mode,
     show_hidden: get(g:, 'v9filer_show_hidden', true),
     expanded: {},
     line_paths: {},
     help: false,
-    prev_buf: prev_buf,
   }
 enddef
 
@@ -38,14 +34,6 @@ export def Root(): string
   return get(Get(), 'root', '')
 enddef
 
-export def Mode(): string
-  return get(Get(), 'mode', '')
-enddef
-
-export def IsToggle(): bool
-  return Mode() ==# 'toggle'
-enddef
-
 export def ShowHidden(): bool
   return get(Get(), 'show_hidden', false)
 enddef
@@ -56,10 +44,6 @@ enddef
 
 export def Expanded(): dict<any>
   return get(Get(), 'expanded', {})
-enddef
-
-export def PreviousBuffer(): number
-  return get(Get(), 'prev_buf', 0)
 enddef
 
 export def SetRoot(root: string): void

@@ -31,16 +31,17 @@ export def Status(root: string): dict<any>
     return status
   endif
 
-  var prefix_resolved = fs.Join(repository_root.value, prefix.value)
+  var prefix_resolved = fs.Normalize(fs.Join(repository_root.value, prefix.value))
   for record in git_cli.Status(root)
-    var path = fs.Join(repository_root.value, record.path)
+    var path = fs.Normalize(fs.Join(repository_root.value, record.path))
     # ignore if the status record is outside the root
-    if stridx(path, prefix_resolved) != 0
+    if !fs.IsUnder(path, prefix_resolved)
       continue
     endif
 
     # mark file and all its ancestors as dirty
-    var path_in_root = fs.Join(root, path[strlen(prefix_resolved) : ])
+    var relative = path ==# prefix_resolved ? '' : path[strlen(prefix_resolved) + 1 :]
+    var path_in_root = empty(relative) ? root : fs.Join(root, relative)
     status.paths[path_in_root] = GetStatusKind(record.status_text)
     for directory in fs.Ancestors(path_in_root, root)
       status.directories[directory] = true

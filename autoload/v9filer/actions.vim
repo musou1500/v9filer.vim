@@ -40,8 +40,13 @@ export def DeleteUnderCursor(): void
   if empty(path)
     return
   endif
-  if confirm('Delete ' .. path .. '?', "&Yes\n&No", 2) == 1
-    fs.Delete(path)
+  if confirm(DeletePrompt(path), "&Yes\n&No", 2) == 1
+    try
+      fs.Delete(path)
+    catch
+      echoerr v:exception
+      return
+    endtry
     render.Refresh()
   endif
 enddef
@@ -51,27 +56,56 @@ export def RenameUnderCursor(): void
   if empty(path)
     return
   endif
-  var new_name = input('Rename to: ', fnamemodify(path, ':t'))
-  if !empty(new_name)
-    var target = fs.RenameTarget(path, new_name)
-    if fs.Exists(target) && !ConfirmOverwrite(target)
-      return
-    endif
-    fs.Rename(path, new_name)
-    render.Refresh()
+  var new_name: string
+  try
+    new_name = input('Rename to: ', fnamemodify(path, ':t'))
+  catch /^Vim:Interrupt$/
+    return
+  endtry
+  if empty(new_name)
+    return
   endif
+  var target = fs.RenameTarget(path, new_name)
+  if path ==# target
+    return
+  endif
+  if fs.Exists(target) && !ConfirmOverwrite(target)
+    return
+  endif
+  try
+    fs.Rename(path, target)
+  catch
+    echoerr v:exception
+    return
+  endtry
+  render.Refresh()
 enddef
 
 export def CreateInRoot(): void
-  var name = input('New file or directory: ')
-  if !empty(name)
-    var target = fs.CreateTarget(state.Root(), name)
-    if fs.Exists(target) && !ConfirmOverwrite(target)
-      return
-    endif
-    fs.Create(state.Root(), name)
-    render.Refresh()
+  var name: string
+  try
+    name = input('New file or directory: ')
+  catch /^Vim:Interrupt$/
+    return
+  endtry
+  if empty(name)
+    return
   endif
+  var target = fs.CreateTarget(state.Root(), name)
+  if isdirectory(target)
+    echo target .. ' already exists'
+    return
+  endif
+  if fs.Exists(target) && !ConfirmOverwrite(target)
+    return
+  endif
+  try
+    fs.Create(state.Root(), name)
+  catch
+    echoerr v:exception
+    return
+  endtry
+  render.Refresh()
 enddef
 
 export def ToggleHidden(): void
@@ -83,20 +117,20 @@ export def Refresh(): void
   render.Refresh()
 enddef
 
-export def LcdRoot(): void
-  execute 'lcd ' .. fnameescape(state.Root())
-enddef
-
 export def YankPath(): void
   var path = PathUnderCursor()
   if empty(path)
     path = state.Root()
   endif
   setreg('"', path)
-  try
-    setreg('+', path)
-  catch
-  endtry
+  if has('clipboard_working')
+    if &clipboard =~# '\<unnamedplus\>'
+      setreg('+', path)
+    endif
+    if &clipboard =~# '\<unnamed\>'
+      setreg('*', path)
+    endif
+  endif
   echo path
 enddef
 
@@ -106,21 +140,10 @@ export def ToggleHelp(): void
 enddef
 
 export def Close(): void
-  if state.IsToggle()
-    if exists('t:v9filer_toggle_buf') && t:v9filer_toggle_buf == bufnr('%')
-      unlet! t:v9filer_toggle_buf
-    endif
-    close
-    return
+  if exists('t:v9filer_buf') && t:v9filer_buf == bufnr('%')
+    unlet! t:v9filer_buf
   endif
-
-  var prev_buf = state.PreviousBuffer()
-  render.ClearHighlights()
-  if prev_buf > 0 && bufexists(prev_buf)
-    execute 'buffer ' .. prev_buf
-  else
-    enew
-  endif
+  close
 enddef
 
 def OpenPath(kind: string): void
@@ -143,16 +166,13 @@ enddef
 def ChangeRoot(path: string): void
   var root = fs.Normalize(path)
   state.SetRoot(root)
-  execute 'file ' .. fnameescape('v9filer-' .. state.Mode() .. '://' .. root)
+  execute 'file ' .. fnameescape('v9filer://' .. root)
+  execute 'tcd ' .. fnameescape(root)
   render.Refresh()
 enddef
 
 def OpenFile(path: string, kind: string): void
-  if state.IsToggle()
-    MoveToTargetWindow()
-  elseif kind ==# 'edit'
-    render.ClearHighlights()
-  endif
+  MoveToTargetWindow()
 
   if kind ==# 'vertical'
     execute 'vertical split ' .. fnameescape(path)
@@ -184,6 +204,15 @@ enddef
 
 def PathUnderCursor(): string
   return state.PathForLine(line('.'))
+enddef
+
+def DeletePrompt(path: string): string
+  # Directories use Vim's `delete(_, 'rf')` which recursively removes
+  # everything underneath, so warn the user before they confirm.
+  if isdirectory(path) && getftype(path) !=# 'link'
+    return 'WARNING: recursively delete ' .. path .. ' and all its contents?'
+  endif
+  return 'Delete ' .. path .. '?'
 enddef
 
 def ConfirmOverwrite(path: string): bool

@@ -8,8 +8,7 @@ It shows a directory tree for the current or selected directory, and lets you na
 ## Features
 
 - Lightweight file tree written in Vim9script
-- Embedded mode that replaces the current window
-- Toggle mode that opens as a left sidebar
+- Sidebar that toggles open/closed per tab
 - Directory expand/collapse, parent navigation, and root changes
 - File creation, rename, delete, and path yank actions
 - Hidden file visibility toggle
@@ -52,26 +51,19 @@ To generate help tags after installation:
 
 ## Usage
 
-Open in the current window:
+Open the sidebar, or close it if it is already open:
 
 ```vim
 :V9Filer
-```
-
-Open as a left sidebar, or close it if it is already open:
-
-```vim
-:V9Filer -toggle
 ```
 
 Open a specific directory:
 
 ```vim
 :V9Filer ~/src
-:V9Filer -toggle ~/src
 ```
 
-Reveal the current file in the toggle sidebar:
+Reveal the current file in the sidebar:
 
 ```vim
 :V9FilerReveal
@@ -85,11 +77,9 @@ Global mappings:
 
 | Mapping | Action |
 | --- | --- |
-| `<Leader>ee` | Open the current directory in the toggle sidebar |
-| `<Leader>eE` | Open the current directory in embedded mode |
-| `<Leader>et` | Open the current file's directory in the toggle sidebar |
-| `<Leader>eT` | Open the current file's directory in embedded mode |
-| `<Leader>ef` | Reveal the current file in the toggle sidebar |
+| `<Leader>ee` | Open the current directory in the sidebar |
+| `<Leader>et` | Open the current file's directory in the sidebar |
+| `<Leader>ef` | Reveal the current file in the sidebar |
 
 Main filer buffer mappings:
 
@@ -118,7 +108,7 @@ Example:
 " Hide dotfiles by default
 let g:v9filer_show_hidden = false
 
-" Toggle sidebar width
+" Sidebar width
 let g:v9filer_width = 40
 
 " Automatically reveal the current file when entering buffers

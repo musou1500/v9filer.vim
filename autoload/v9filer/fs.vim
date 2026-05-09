@@ -33,14 +33,7 @@ enddef
 
 export def ListDir(root: string, show_hidden: bool): list<dict<any>>
   var entries: list<dict<any>> = []
-  var names: list<string>
-  try
-    names = readdir(root)
-  catch
-    return entries
-  endtry
-
-  for name in names
+  for name in readdir(root)
     if !show_hidden && name =~# '^\.'
       continue
     endif
@@ -66,9 +59,13 @@ export def Create(root: string, name: string): void
   var is_dir = name =~# '/$'
   var path = CreateTarget(root, name)
   if is_dir
-    mkdir(path, 'p')
+    if mkdir(path, 'p') == 0
+      throw 'v9filer: failed to create ' .. path
+    endif
   else
-    writefile([], path, 'b')
+    if writefile([], path, 'b') != 0
+      throw 'v9filer: failed to create ' .. path
+    endif
   endif
 enddef
 
@@ -77,24 +74,34 @@ export def CreateTarget(root: string, name: string): string
   return Join(root, clean_name)
 enddef
 
-export def Rename(path: string, new_name: string): void
-  if empty(new_name)
+export def Rename(path: string, target: string): void
+  if empty(target) || path ==# target
     return
   endif
-  var target = RenameTarget(path, new_name)
   if rename(path, target) != 0
-    echoerr 'v9filer: failed to rename ' .. path
+    throw 'v9filer: failed to rename ' .. path .. ' to ' .. target
   endif
 enddef
 
+# `new_name` may be a basename, a relative path resolved against the parent
+# of `path`, or an absolute path. Absolute inputs are kept verbatim (Join
+# would otherwise produce "parent//abs"), and `simplify()` collapses ".."
+# and "//" segments lexically so the value is safe to display and stable to
+# compare against `path`.
 export def RenameTarget(path: string, new_name: string): string
-  return Join(Parent(path), new_name)
+  if !empty(new_name) && new_name[0] ==# '/'
+    return simplify(new_name)
+  endif
+  return simplify(Join(Parent(path), new_name))
 enddef
 
 export def Delete(path: string): void
-  var flags = isdirectory(path) ? 'rf' : ''
+  # `isdirectory()` follows symlinks, so checking it first would recurse into
+  # the link target. `getftype()` reports the link itself, so check it first
+  # and only pass 'rf' for real directories.
+  var flags = getftype(path) !=# 'link' && isdirectory(path) ? 'rf' : ''
   if delete(path, flags) != 0
-    echoerr 'v9filer: failed to delete ' .. path
+    throw 'v9filer: failed to delete ' .. path
   endif
 enddef
 
