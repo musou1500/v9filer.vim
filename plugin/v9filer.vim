@@ -31,3 +31,8 @@ augroup v9filer_focus
   autocmd!
   autocmd WinEnter * v9filer.RememberFocusWindow()
 augroup END
+
+augroup v9filer_buf_wipe
+  autocmd!
+  autocmd BufWipeout * v9filer.OnBufWipeout(str2nr(expand('<abuf>')))
+augroup END

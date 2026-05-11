@@ -6,7 +6,7 @@ vim9script
 # Files are added on BufWinEnter for normal file buffers, and removed
 # explicitly via the filer's `x` mapping.
 
-import './state.vim' as state
+import './buf_state.vim' as buf_state
 import './tab_state.vim' as tab_state
 import './fs.vim' as fs
 
@@ -61,7 +61,7 @@ def IsTrackable(): bool
   if &buftype !=# ''
     return false
   endif
-  if state.Has()
+  if buf_state.Has()
     return false
   endif
   if empty(bufname('%'))

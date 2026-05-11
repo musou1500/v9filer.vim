@@ -1,6 +1,7 @@
 vim9script
 
-import './state.vim' as state
+import './buf_state.vim' as buf_state
+import './tab_state.vim' as tab_state
 import './fs.vim' as fs
 import './git.vim' as git
 import './icons.vim' as icons
@@ -16,14 +17,13 @@ const IconHighlightGroups: dict<string> = {
 # highlight positions first, write the lines to the buffer, then apply all
 # highlights with matchaddpos().
 export def Refresh(): void
-  if !state.Has()
+  if !buf_state.Has() || !tab_state.HasState()
     return
   endif
 
   var view = {
     lines: [],
-    line_paths: {},
-    working_file_lines: {},
+    line_index: {},
     entry_count: 0,
     highlight_positions: {
       breadcrumb: [],
@@ -46,23 +46,23 @@ export def Refresh(): void
     },
   }
 
-  var git_status = git.Status(state.Root())
+  var git_status = git.Status(tab_state.Root())
 
-  if state.HelpEnabled()
+  if tab_state.HelpEnabled()
     AddHelp(view)
   endif
 
-  AddWorkingFilesSection(view, state.Root(), git_status)
+  AddWorkingFilesSection(view, tab_state.Root(), git_status)
 
   AddHeader(view, git_status)
 
   try
     AddDirectoryTree(
       view,
-      state.Root(),
+      tab_state.Root(),
       0,
-      state.ShowHidden(),
-      state.Expanded(),
+      tab_state.ShowHidden(),
+      tab_state.Expanded(),
       git_status
     )
   catch
@@ -77,8 +77,7 @@ export def Refresh(): void
 enddef
 
 def Flush(view: dict<any>): void
-  state.SetLinePaths(view.line_paths)
-  state.SetWorkingFileLines(view.working_file_lines)
+  buf_state.SetLines(view.line_index)
 
   var saved_view = winsaveview()
   setlocal modifiable
@@ -91,7 +90,7 @@ def Flush(view: dict<any>): void
 enddef
 
 def AddHeader(view: dict<any>, git_status: dict<any>): void
-  var header_text = fnamemodify(fs.Normalize(state.Root()), ':~')
+  var header_text = fnamemodify(fs.Normalize(tab_state.Root()), ':~')
   var lnum = len(view.lines) + 1
   var text = header_text
   add(view.lines, text)
@@ -99,7 +98,7 @@ def AddHeader(view: dict<any>, git_status: dict<any>): void
 enddef
 
 def AddHelp(view: dict<any>): void
-  var help_text = '? help | <CR> open/toggle | l enter | - parent | x remove | . hidden | R refresh | q close'
+  var help_text = '? help | <CR> open/expand | l enter | - parent | x remove | . hidden | R refresh | q close'
   add(view.lines, help_text)
   add(view.highlight_positions.help, [len(view.lines), 1, strlen(help_text)])
   add(view.lines, '')
@@ -222,8 +221,7 @@ def AddWorkingFileEntry(
   endif
 
   add(view.lines, text)
-  view.line_paths[string(lnum)] = path
-  view.working_file_lines[string(lnum)] = true
+  view.line_index[string(lnum)] = {path: path, is_working: true}
 enddef
 
 def ParentDisplay(parent: string, root: string): string
@@ -402,7 +400,7 @@ def AddEntry(
 
   # apply built text and highlights to view
   add(view.lines, text)
-  view.line_paths[string(lnum)] = entry.path
+  view.line_index[string(lnum)] = {path: entry.path, is_working: false}
   view.entry_count += 1
 enddef
 

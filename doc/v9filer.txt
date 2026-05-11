@@ -15,9 +15,14 @@ CONTENTS                                                    *v9filer-contents*
 
 v9filer is a simple file explorer plugin written in Vim9 script. It opens as
 a left-side vertical split (sidebar) showing the directory contents as an
-inline expandable tree, with a header showing the current root path. The
-sidebar can be toggled by re-running |:V9Filer|. A tab-local variable tracks
-the sidebar buffer so it is shared per tab.
+inline expandable tree, with a header showing the current root path.
+
+The sidebar buffer is ephemeral: it is created on each open and wiped when
+the sidebar window closes. Per-tab UI state (root, expanded directories,
+hidden-file flag, help flag) lives in a tab-local variable instead, so
+closing and reopening the sidebar in the same tab restores the previous
+view. Each tab gets a uniquely numbered buffer name (`v9filer #<n>`) so two
+tabs can hold a sidebar at the same directory without colliding.
 
 Pressing <CR> on a file opens it in the last focused non-filer window,
 leaving the sidebar open.
@@ -63,9 +68,9 @@ can be added before entry names.
 2. Commands                                                  *v9filer-commands*
 
 :V9Filer [dir]                                                      *:V9Filer*
-    Open the filer as a sidebar in the current tab. If a sidebar is already
-    open in the current tab it is closed (toggle). If [dir] is omitted, the
-    current working directory is used.
+    Open the filer as a sidebar in the current tab. If [dir] is omitted, the
+    current working directory is used. If a sidebar is already open in the
+    current tab, it is focused and its root is updated to [dir].
 
 :Filer [...]                                                          *:Filer*
     Alias for |:V9Filer|. Accepts the same arguments.
@@ -132,11 +137,14 @@ File operations ~
             move the entry into another directory. If the target already
             exists, an overwrite confirmation is shown first.
 
-    %       Create a new file or directory in the current root. An input
-            prompt is shown for the name. A trailing `/` creates a directory.
-            If a regular file already exists at the target, an overwrite
-            confirmation is shown first; if a directory already exists, the
-            command reports it and does nothing.
+    %       Create a new file or directory. The destination is chosen from
+            the cursor line: a directory row creates inside that directory,
+            a file row creates inside its parent directory, and any other
+            line falls back to the current root. An input prompt is shown
+            for the name. A trailing `/` creates a directory. If a regular
+            file already exists at the target, an overwrite confirmation is
+            shown first; if a directory already exists, the command reports
+            it and does nothing.
 
 Other ~
 
@@ -306,18 +314,31 @@ public highlight interface do not grow for every filename or extension.
 
 Compared to earlier releases:
 
+- `:V9Filer` no longer toggles the sidebar closed when re-run. Re-running
+  `:V9Filer` always leaves the sidebar open: with no argument or the same
+  [dir] the sidebar is focused; with a different [dir] the root is updated.
+  Use `q` to close the sidebar.
+
 - The `C` mapping (`LcdRoot`) has been removed. Changing the root now
   updates the tab-local working directory automatically via |:tcd|, which
   also propagates to the editing window in the same tab.
 
-- Embedded mode has been removed. `:V9Filer` now always opens the sidebar
-  (toggle behaviour). The `-toggle` argument is no longer recognised; pass
-  the directory directly.
+- Embedded mode has been removed. `:V9Filer` now always opens the sidebar.
+  The `-toggle` argument is no longer recognised; pass the directory
+  directly.
 
 - `<Leader>eE` and `<Leader>eT` (embedded-mode mappings) have been removed.
 
 - Buffer names changed back from `v9filer-toggle://<path>` (and the dropped
-  `v9filer-embedded://<path>`) to `v9filer://<path>`.
+  `v9filer-embedded://<path>`) to `v9filer://<path>`, and then to the current
+  abstract form `v9filer #<n>` (where `<n>` is a tab-stable identifier). The
+  current root is shown in the breadcrumb header inside the buffer.
+
+- The sidebar buffer became ephemeral (`bufhidden=wipe`). Sidebar UI state
+  moved to per-tab variables (`t:v9filer_root`, `t:v9filer_expanded`,
+  `t:v9filer_show_hidden`, `t:v9filer_help`) so it survives buffer wipe
+  within the same tab. External scripts that detect a filer buffer should
+  test `b:v9filer_state` rather than match the buffer name.
 
 - The internal tab-local variable changed from `t:v9filer_toggle_buf` to
   `t:v9filer_buf`.

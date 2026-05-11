@@ -1,6 +1,6 @@
 vim9script
 
-import './v9filer/state.vim' as state
+import './v9filer/buf_state.vim' as buf_state
 import './v9filer/tab_state.vim' as tab_state
 import './v9filer/fs.vim' as fs
 import './v9filer/render.vim' as render
@@ -16,13 +16,18 @@ export def Open(args: string = ''): void
   var root = fs.Normalize(empty(args) ? getcwd() : args)
   RememberFocusWindow()
 
-  if tab_state.HasBuf()
-    var win = bufwinnr(tab_state.Buf())
-    if win != -1
-      win_gotoid(win_getid(win))
-      close
-      return
-    endif
+  if !tab_state.HasState()
+    tab_state.AllocateId()
+    tab_state.InitState(root)
+  elseif tab_state.Root() !=# root
+    tab_state.SetRoot(root)
+  endif
+
+  var existing_win = bufwinnr(tab_state.Buf())
+  if existing_win != -1
+    win_gotoid(win_getid(existing_win))
+    render.Refresh()
+    return
   endif
 
   var width = get(g:, 'v9filer_width', 30)
@@ -34,8 +39,10 @@ export def Open(args: string = ''): void
   endtry
   execute 'vertical resize ' .. width
   setlocal winfixwidth
+
   tab_state.SetBuf(bufnr('%'))
-  SetupBuffer(root)
+  SetupBuffer()
+  render.Refresh()
 enddef
 
 export def RevealCurrentFile(): void
@@ -59,10 +66,13 @@ export def OnBufWinEnter(): void
   RefreshFilerIfVisible()
 enddef
 
-def RefreshFilerIfVisible(): void
-  if !tab_state.HasBuf()
-    return
+export def OnBufWipeout(bufnr: number): void
+  if tab_state.Buf() == bufnr
+    tab_state.UnsetBuf()
   endif
+enddef
+
+def RefreshFilerIfVisible(): void
   var winnr = bufwinnr(tab_state.Buf())
   if winnr == -1
     return
@@ -77,7 +87,7 @@ def RefreshFilerIfVisible(): void
 enddef
 
 def OpenInNewTab(): void
-  var path = state.PathForLine(line('.'))
+  var path = buf_state.PathForLine(line('.'))
   if empty(path)
     return
   endif
@@ -93,13 +103,13 @@ def OpenInNewTab(): void
 enddef
 
 def IsFilerBuffer(): bool
-  return state.Has()
+  return buf_state.Has()
 enddef
 
-def SetupBuffer(root: string): void
-  execute 'file ' .. fnameescape('v9filer://' .. root)
+def SetupBuffer(): void
+  execute 'file ' .. fnameescape(printf('v9filer #%d', tab_state.Id()))
   setlocal buftype=nofile
-  setlocal bufhidden=hide
+  setlocal bufhidden=wipe
   setlocal noswapfile
   setlocal nobuflisted
   setlocal nowrap
@@ -109,13 +119,12 @@ def SetupBuffer(root: string): void
   setlocal foldcolumn=0
   setlocal nomodifiable
 
-  state.Set(state.New(root))
+  buf_state.Set(buf_state.New())
   DefineBufferMappings()
-  render.Refresh()
 enddef
 
 def DefineBufferMappings(): void
-  nnoremap <buffer><silent> <CR> <ScriptCmd>actions.OpenOrToggle()<CR>
+  nnoremap <buffer><silent> <CR> <ScriptCmd>actions.OpenOrExpand()<CR>
   nnoremap <buffer><silent> l <ScriptCmd>actions.ChangeRootUnderCursor()<CR>
   nnoremap <buffer><silent> - <ScriptCmd>actions.GoParent()<CR>
   nnoremap <buffer><silent> <BS> <ScriptCmd>actions.GoParent()<CR>
@@ -124,7 +133,7 @@ def DefineBufferMappings(): void
   nnoremap <buffer><silent> t <ScriptCmd>OpenInNewTab()<CR>
   nnoremap <buffer><silent> D <ScriptCmd>actions.DeleteUnderCursor()<CR>
   nnoremap <buffer><silent> r <ScriptCmd>actions.RenameUnderCursor()<CR>
-  nnoremap <buffer><silent> % <ScriptCmd>actions.CreateInRoot()<CR>
+  nnoremap <buffer><silent> % <ScriptCmd>actions.CreateUnderCursor()<CR>
   nnoremap <buffer><silent> . <ScriptCmd>actions.ToggleHidden()<CR>
   nnoremap <buffer><silent> R <ScriptCmd>actions.Refresh()<CR>
   nnoremap <buffer><silent> y <ScriptCmd>actions.YankPath()<CR>
@@ -134,7 +143,8 @@ def DefineBufferMappings(): void
 enddef
 
 def Reveal(silent: bool): void
-  if !tab_state.HasBuf()
+  var filer_win = bufwinnr(tab_state.Buf())
+  if filer_win == -1
     return
   endif
 
@@ -144,20 +154,15 @@ def Reveal(silent: bool): void
   endif
   target = fs.Normalize(target)
 
-  var filer_win = bufwinnr(tab_state.Buf())
-  if filer_win == -1
-    return
-  endif
-
   var current_win = win_getid()
   win_gotoid(win_getid(filer_win))
-  var root = state.Root()
-  if !state.Has() || !fs.IsUnder(target, root)
+  var root = tab_state.Root()
+  if !tab_state.HasState() || !fs.IsUnder(target, root)
     win_gotoid(current_win)
     return
   endif
 
-  state.ExpandPaths(fs.Ancestors(target, root))
+  tab_state.ExpandPaths(fs.Ancestors(target, root))
   render.Refresh()
   MoveCursorToPath(target)
   if !silent
@@ -169,7 +174,7 @@ enddef
 def MoveCursorToPath(path: string): void
   var line_count = line('$')
   for line_number in range(1, line_count)
-    if state.PathForLine(line_number) ==# path
+    if buf_state.TreePathForLine(line_number) ==# path
       cursor(line_number, 1)
       return
     endif
