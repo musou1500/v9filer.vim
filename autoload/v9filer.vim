@@ -14,6 +14,10 @@ enddef
 
 export def Open(args: string = ''): void
   var root = fs.Normalize(empty(args) ? getcwd() : args)
+  # Snapshot the current window before any navigation below. The WinEnter
+  # autocmd normally keeps t:v9filer_last_focus_winid up to date, but it does
+  # not fire for the initial window at Vim startup nor for the first window
+  # of a freshly-created tab — so we record it explicitly here.
   RememberFocusWindow()
 
   if !tab_state.HasState()
@@ -31,6 +35,10 @@ export def Open(args: string = ''): void
   endif
 
   var width = get(g:, 'v9filer_width', 30)
+  # `topleft vertical new` below fires WinEnter on the new window before
+  # SetupBuffer() runs, so IsFilerBuffer() cannot yet recognize it as the
+  # filer. Guard the WinEnter handler so RememberFocusWindow does not record
+  # the filer window itself as the last-focused window.
   tab_state.SetOpening(true)
   try
     topleft vertical new
