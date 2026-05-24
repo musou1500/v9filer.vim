@@ -6,10 +6,24 @@ import './v9filer/fs.vim' as fs
 import './v9filer/render.vim' as render
 import './v9filer/actions.vim' as actions
 import './v9filer/working_files.vim' as working_files
+import './v9filer/home.vim' as home
 
 export def CurrentFileDir(): string
   var path = expand('%:p:h')
   return empty(path) ? getcwd() : path
+enddef
+
+export def Toggle(args: string = ''): void
+  if tab_state.HasState() && bufwinnr(tab_state.Buf()) != -1
+    var current = win_getid()
+    win_gotoid(win_getid(bufwinnr(tab_state.Buf())))
+    close
+    if win_id2win(current) != 0
+      win_gotoid(current)
+    endif
+    return
+  endif
+  Open(args)
 enddef
 
 export def Open(args: string = ''): void
@@ -64,9 +78,38 @@ export def AutoReveal(): void
 enddef
 
 export def RememberFocusWindow(): void
-  if !tab_state.IsOpening() && !IsFilerBuffer()
+  if !tab_state.IsOpening() && !IsFilerBuffer() && !home.IsHomeBuffer()
     tab_state.SetLastFocusWinid(win_getid())
   endif
+enddef
+
+export def OpenHome(): void
+  if !tab_state.HasState()
+    # No sidebar in this tab — open Home in the current window rather than
+    # splitting off an unrelated one.
+    home.Open('edit-here')
+    return
+  endif
+  home.Open('edit')
+enddef
+
+# Invoked on VimEnter. Opens both the sidebar and Home when:
+#   - `g:v9filer_open_home_on_startup` is truthy, AND
+#   - Vim was started with no file arguments, AND
+#   - the initial buffer is still the empty, unnamed default (so stdin pipes,
+#     `vim -c 'edit foo'`, session restores, etc. are left alone).
+export def OpenHomeOnStartup(): void
+  if !get(g:, 'v9filer_open_home_on_startup', true)
+    return
+  endif
+  if argc() != 0
+    return
+  endif
+  if !empty(bufname('%')) || &buftype !=# '' || line('$') > 1 || !empty(getline(1))
+    return
+  endif
+  Open('')
+  OpenHome()
 enddef
 
 export def OnBufWinEnter(): void
@@ -78,6 +121,11 @@ export def OnBufWipeout(bufnr: number): void
   if tab_state.Buf() == bufnr
     tab_state.UnsetBuf()
   endif
+  home.OnBufWipeout(bufnr)
+enddef
+
+export def OnBufWinLeave(bufnr: number): void
+  home.OnBufWinLeave(bufnr)
 enddef
 
 def RefreshFilerIfVisible(): void
@@ -94,7 +142,11 @@ def RefreshFilerIfVisible(): void
   endtry
 enddef
 
-def OpenInNewTab(): void
+export def OpenInNewTab(): void
+  if buf_state.IsHomeLine(line('.'))
+    home.Open('tab')
+    return
+  endif
   var path = buf_state.PathForLine(line('.'))
   if empty(path)
     return
@@ -111,7 +163,10 @@ def OpenInNewTab(): void
 enddef
 
 def IsFilerBuffer(): bool
-  return buf_state.Has()
+  # Home buffers also set b:v9filer_state when they reuse the render
+  # infrastructure — they don't, but the explicit exclusion makes the
+  # contract obvious.
+  return buf_state.Has() && !home.IsHomeBuffer()
 enddef
 
 def SetupBuffer(): void
@@ -132,22 +187,22 @@ def SetupBuffer(): void
 enddef
 
 def DefineBufferMappings(): void
-  nnoremap <buffer><silent> <CR> <ScriptCmd>actions.OpenOrExpand()<CR>
-  nnoremap <buffer><silent> l <ScriptCmd>actions.ChangeRootUnderCursor()<CR>
-  nnoremap <buffer><silent> - <ScriptCmd>actions.GoParent()<CR>
-  nnoremap <buffer><silent> <BS> <ScriptCmd>actions.GoParent()<CR>
-  nnoremap <buffer><silent> v <ScriptCmd>actions.OpenVertical()<CR>
-  nnoremap <buffer><silent> s <ScriptCmd>actions.OpenHorizontal()<CR>
-  nnoremap <buffer><silent> t <ScriptCmd>OpenInNewTab()<CR>
-  nnoremap <buffer><silent> D <ScriptCmd>actions.DeleteUnderCursor()<CR>
-  nnoremap <buffer><silent> r <ScriptCmd>actions.RenameUnderCursor()<CR>
-  nnoremap <buffer><silent> % <ScriptCmd>actions.CreateUnderCursor()<CR>
-  nnoremap <buffer><silent> . <ScriptCmd>actions.ToggleHidden()<CR>
-  nnoremap <buffer><silent> R <ScriptCmd>actions.Refresh()<CR>
-  nnoremap <buffer><silent> y <ScriptCmd>actions.YankPath()<CR>
-  nnoremap <buffer><silent> x <ScriptCmd>actions.RemoveWorkingFile()<CR>
-  nnoremap <buffer><silent> ? <ScriptCmd>actions.ToggleHelp()<CR>
-  nnoremap <buffer><silent> q <ScriptCmd>actions.Close()<CR>
+  nmap <buffer> <CR>  <Plug>(V9FilerOpenOrExpand)
+  nmap <buffer> l     <Plug>(V9FilerChangeRoot)
+  nmap <buffer> -     <Plug>(V9FilerGoParent)
+  nmap <buffer> <BS>  <Plug>(V9FilerGoParent)
+  nmap <buffer> v     <Plug>(V9FilerOpenVertical)
+  nmap <buffer> s     <Plug>(V9FilerOpenHorizontal)
+  nmap <buffer> t     <Plug>(V9FilerOpenInNewTab)
+  nmap <buffer> D     <Plug>(V9FilerDelete)
+  nmap <buffer> r     <Plug>(V9FilerRename)
+  nmap <buffer> %     <Plug>(V9FilerCreate)
+  nmap <buffer> .     <Plug>(V9FilerToggleHidden)
+  nmap <buffer> R     <Plug>(V9FilerRefresh)
+  nmap <buffer> y     <Plug>(V9FilerYankPath)
+  nmap <buffer> x     <Plug>(V9FilerRemoveWorkingFile)
+  nmap <buffer> ?     <Plug>(V9FilerToggleHelp)
+  nmap <buffer> q     <Plug>(V9FilerClose)
 enddef
 
 def Reveal(silent: bool): void

@@ -46,6 +46,79 @@ export def TopLevel(root: string): dict<any>
   }
 enddef
 
+export def Branch(root: string): dict<any>
+  # `rev-parse --abbrev-ref HEAD` returns the branch name (e.g. `main`) or the
+  # literal string `HEAD` when in detached-HEAD mode. Callers decide how to
+  # display the detached case.
+  var output = system([
+    'git',
+    '-C',
+    root,
+    'rev-parse',
+    '--abbrev-ref',
+    'HEAD',
+  ])
+  if v:shell_error != 0 || empty(output)
+    return {
+      ok: false,
+      value: '',
+    }
+  endif
+  return {
+    ok: true,
+    value: substitute(output, '\r\?\n\%$', '', ''),
+  }
+enddef
+
+export def Numstat(root: string): dict<any>
+  # `git diff --numstat HEAD --no-renames` lists working-tree changes vs HEAD
+  # as tab-separated `<added>\t<deleted>\t<path>` records. Binary files show
+  # `-\t-\t<path>`; we coerce those to 0/0 so callers can sum totals without
+  # special-casing. Untracked files are *not* included — Summary merges those
+  # in via git.Status separately.
+  var output = system([
+    'git',
+    '-c',
+    'core.quotePath=false',
+    '-C',
+    root,
+    'diff',
+    '--numstat',
+    '--no-renames',
+    'HEAD',
+  ])
+  if v:shell_error != 0
+    return {
+      ok: false,
+      value: [],
+    }
+  endif
+
+  var records: list<dict<any>> = []
+  for line in split(output, '\r\?\n')
+    if empty(line)
+      continue
+    endif
+    var parts = split(line, '\t')
+    if len(parts) < 3
+      continue
+    endif
+    var added = parts[0] ==# '-' ? 0 : str2nr(parts[0])
+    var deleted = parts[1] ==# '-' ? 0 : str2nr(parts[1])
+    var path_text = join(parts[2 :], '\t')
+    add(records, {
+      added: added,
+      deleted: deleted,
+      path: DecodePath(path_text),
+    })
+  endfor
+
+  return {
+    ok: true,
+    value: records,
+  }
+enddef
+
 export def Status(root: string): list<dict<any>>
   # --no-renames keeps a rename as separate delete/add records. That matches
   # the tree view: the new path can be shown directly, while the deleted old

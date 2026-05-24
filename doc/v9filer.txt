@@ -7,8 +7,9 @@ CONTENTS                                                    *v9filer-contents*
     2. Commands ..................................... |v9filer-commands|
     3. Mappings ..................................... |v9filer-mappings|
     4. Working Files ................................ |v9filer-working-files|
-    5. Configuration ................................ |v9filer-config|
-    6. Breaking Changes ............................. |v9filer-breaking|
+    5. Home ......................................... |v9filer-home|
+    6. Configuration ................................ |v9filer-config|
+    7. Breaking Changes ............................. |v9filer-breaking|
 
 ==============================================================================
 1. Introduction                                                      *v9filer*
@@ -80,6 +81,12 @@ can be added before entry names.
     to the entry. Does nothing if no sidebar is open in the current tab or
     if the current file is outside the sidebar's root.
 
+:V9FilerHome                                                    *:V9FilerHome*
+    Open the Home view. See |v9filer-home| for the contents and mappings.
+    When a sidebar exists in the current tab, Home opens in the last focused
+    non-filer window (same target rule as opening a file). When no sidebar
+    exists, Home replaces the current window instead of splitting.
+
 ==============================================================================
 3. Mappings                                                  *v9filer-mappings*
 
@@ -88,9 +95,59 @@ Global mappings ~
 Unless |g:v9filer_no_default_mappings| is set, the following mappings are
 defined globally:
 
-    <Leader>ee  Open the sidebar in the current working directory.
-    <Leader>et  Open the sidebar in the directory of the current file.
+    <Leader>ee  Toggle the sidebar; when opening, root is the current
+                working directory.
+    <Leader>et  Toggle the sidebar; when opening, root is the directory of
+                the current file.
     <Leader>ef  Reveal the current file in the sidebar.
+
+<Plug> mappings ~                                              *v9filer-plug*
+
+Every action exposed by v9filer is also defined as a <Plug> mapping so users
+can rebind without depending on the default keys. The default global maps
+above and the buffer-local maps inside the sidebar and Home buffers all
+delegate to these names.
+
+Global actions:
+    <Plug>(V9FilerToggle)             Toggle sidebar at the current working
+                                      directory.
+    <Plug>(V9FilerToggleHere)         Toggle sidebar at the current file's
+                                      directory.
+    <Plug>(V9FilerReveal)             Reveal current file in sidebar.
+    <Plug>(V9FilerOpenHome)           Open the Home view.
+
+Sidebar buffer actions:
+    <Plug>(V9FilerOpenOrExpand)       <CR> — open file / toggle directory.
+    <Plug>(V9FilerChangeRoot)         l    — change root to directory under
+                                              cursor.
+    <Plug>(V9FilerGoParent)           - / <BS> — go to parent directory.
+    <Plug>(V9FilerOpenVertical)       v    — open in a vertical split.
+    <Plug>(V9FilerOpenHorizontal)     s    — open in a horizontal split.
+    <Plug>(V9FilerOpenInNewTab)       t    — open in a new tab.
+    <Plug>(V9FilerDelete)             D    — delete entry.
+    <Plug>(V9FilerRename)             r    — rename entry.
+    <Plug>(V9FilerCreate)             %    — create file or directory.
+    <Plug>(V9FilerToggleHidden)       .    — toggle hidden file display.
+    <Plug>(V9FilerRefresh)            R    — refresh sidebar.
+    <Plug>(V9FilerYankPath)           y    — yank path under cursor.
+    <Plug>(V9FilerRemoveWorkingFile)  x    — remove Working Files entry.
+    <Plug>(V9FilerToggleHelp)         ?    — toggle quick help.
+    <Plug>(V9FilerClose)              q    — close sidebar.
+
+Home buffer actions:
+    <Plug>(V9FilerHomeOpen)             <CR> — open entry, replacing Home.
+    <Plug>(V9FilerHomeOpenHorizontal)   s    — open in a horizontal split.
+    <Plug>(V9FilerHomeOpenVertical)     v    — open in a vertical split.
+    <Plug>(V9FilerHomeOpenInNewTab)     t    — open in a new tab.
+    <Plug>(V9FilerHomeRefresh)          R    — rescan and redraw.
+    <Plug>(V9FilerHomeClose)            q    — close Home window.
+
+Example: bind your own global keys after disabling the defaults: >
+    let g:v9filer_no_default_mappings = true
+    nmap <silent> <F3>   <Plug>(V9FilerToggle)
+    nmap <silent> <F4>   <Plug>(V9FilerReveal)
+    nmap <silent> gh     <Plug>(V9FilerOpenHome)
+<
 
 Buffer-local mappings ~
 
@@ -195,7 +252,83 @@ mappings (`<CR>`, `v`, `s`, `t`, `y`) work on Working Files rows just like on
 tree rows.
 
 ==============================================================================
-5. Configuration                                              *v9filer-config*
+5. Home                                                         *v9filer-home*
+
+Home is a lightweight dashboard buffer that summarises the current
+repository: branch, working-tree diff totals, per-file changes, and a list
+of `TODO` comments. It is intended for the moment between tasks when you
+want to remember what is changed and what is unfinished.
+
+Opening Home ~
+
+The sidebar shows a `Home` row above Working Files. On that row:
+
+    <CR>  Open Home in the last focused non-filer window.
+    s     Open Home in a horizontal split.
+    v     Open Home in a vertical split.
+    t     Open Home in a new tab.
+
+|:V9FilerHome| opens Home directly without requiring a sidebar.
+
+Home is a scratch buffer (`v9filer home #<n>`, `bufhidden=wipe`). Closing
+the window discards the buffer; reopening rebuilds the content. State is
+not persisted between opens.
+
+When |g:v9filer_nerd_font_icons| is enabled, the section headers
+(`V9Filer Home`, `Git:`, `TODO:`) get nerd-font glyphs, and each file row
+in the Git section and each path row in the TODO section is prefixed with
+the same per-extension icon used in the sidebar.
+
+Contents ~
+
+Git section ~
+
+    Git: <branch>  +<added> -<deleted>  (<files> files)
+      [M] path/to/file        +<added> -<deleted>
+      [+] path/to/new-file
+      [D] path/to/deleted
+      [!] path/to/conflicted
+
+Status markers:
+
+    `[M]`  modified
+    `[+]`  new (staged add or untracked)
+    `[D]`  deleted
+    `[!]`  merge conflict
+
+Diff totals come from `git diff --numstat HEAD --no-renames` and therefore
+cover tracked changes only. Untracked files appear in the per-file list with
+no diff numbers; they are not summed into the header totals. Outside a Git
+repository, Home shows `Git: (not a git repository)` and skips the file
+list.
+
+TODO section ~
+
+Each TODO entry uses two lines:
+
+    path/to/file:<lnum>
+      TODO: comment text
+
+Scanning prefers `rg`; when `rg` is unavailable and the root is inside a
+Git repository, Home falls back to `git grep --untracked`. When neither
+tool is available, Home shows a warning and an empty TODO list. Only lines
+that begin with a comment marker followed by `TODO:` are matched —
+`# TODO:` and `// TODO:`, optionally indented. Trailing inline comments
+(e.g. `foo;  # TODO:`) and bare `TODO` mentions in prose, docs, or string
+literals are excluded.
+
+Buffer-local mappings (inside Home) ~
+
+    <CR>  Open the file under the cursor (Home is replaced with the file).
+          On a TODO row, the cursor jumps to the referenced line.
+    s     Same as <CR> but uses a horizontal split, leaving Home visible.
+    v     Same as <CR> but uses a vertical split.
+    t     Same as <CR> but opens in a new tab.
+    R     Re-scan Git status and TODOs and redraw.
+    q     Close the Home window.
+
+==============================================================================
+6. Configuration                                              *v9filer-config*
 
 *g:v9filer_show_hidden*
     When set to |true|, hidden files (dotfiles) are shown by default.
@@ -214,6 +347,16 @@ tree rows.
     file when switching buffers.
     Default: false >
         let g:v9filer_auto_reveal = true
+<
+
+*g:v9filer_open_home_on_startup*
+    When set to |true|, opens the sidebar and the |v9filer-home| view on
+    Vim startup, but only when Vim was launched with no file arguments and
+    the initial buffer is the empty unnamed default. Sessions, stdin pipes
+    (`vim -`), `vim -c '...'` with an explicit edit, and any non-empty
+    starting buffer are left alone.
+    Default: false >
+        let g:v9filer_open_home_on_startup = true
 <
 
 *g:v9filer_use_colors*
@@ -295,6 +438,18 @@ The default highlight links and colors are:
     V9FilerEmpty           -> Comment
     V9FilerWorkingFilesHeader -> Title
     V9FilerWorkingFilesPath   -> Comment
+    V9FilerHomeMenu           -> Title
+    V9FilerHomeHeader         -> Title
+    V9FilerHomeSection        -> Statement
+    V9FilerHomeBranch         -> Identifier
+    V9FilerHomeAdded          -> DiffAdd
+    V9FilerHomeDeleted        -> DiffDelete
+    V9FilerHomeStatusModified -> WarningMsg
+    V9FilerHomeStatusNew      -> MoreMsg
+    V9FilerHomeStatusDeleted  -> ErrorMsg
+    V9FilerHomeStatusConflict -> ErrorMsg
+    V9FilerHomeTodoKeyword    -> Todo
+    V9FilerHomePath           -> Directory
 
 When |g:v9filer_nerd_font_icons| is enabled, icons are highlighted by entry
 kind by default. Built-in rules, fallback icons, and
@@ -310,7 +465,7 @@ public highlight interface do not grow for every filename or extension.
 <
 
 ==============================================================================
-6. Breaking Changes                                          *v9filer-breaking*
+7. Breaking Changes                                          *v9filer-breaking*
 
 Compared to earlier releases:
 

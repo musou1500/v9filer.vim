@@ -7,12 +7,6 @@ import './git.vim' as git
 import './icons.vim' as icons
 import './working_files.vim' as working_files
 
-const IconHighlightGroups: dict<string> = {
-  directory: 'V9FilerIconDirectory',
-  executable: 'V9FilerIconExecutable',
-  file: 'V9FilerIconFile',
-}
-
 # Rendering is staged through a view dictionary: collect the text lines and
 # highlight positions first, write the lines to the buffer, then apply all
 # highlights with matchaddpos().
@@ -43,6 +37,7 @@ export def Refresh(): void
       empty_lines: [],
       working_files_header: [],
       working_files_paths: [],
+      home_menu: [],
     },
   }
 
@@ -51,6 +46,8 @@ export def Refresh(): void
   if tab_state.HelpEnabled()
     AddHelp(view)
   endif
+
+  AddHomeMenu(view)
 
   AddWorkingFilesSection(view, tab_state.Root(), git_status)
 
@@ -101,6 +98,18 @@ def AddHelp(view: dict<any>): void
   var help_text = '? help | <CR> open/expand | l enter | - parent | x remove | . hidden | R refresh | q close'
   add(view.lines, help_text)
   add(view.highlight_positions.help, [len(view.lines), 1, strlen(help_text)])
+  add(view.lines, '')
+enddef
+
+def AddHomeMenu(view: dict<any>): void
+  # One-line entry pointing at the Home view. Sits above Working Files so the
+  # most-recent sidebar content does not push it off-screen. Path is empty;
+  # actions resolve the row via buf_state.IsHomeLine.
+  var label = 'Home'
+  add(view.lines, label)
+  var lnum = len(view.lines)
+  add(view.highlight_positions.home_menu, [lnum, 1, strlen(label)])
+  view.line_index[string(lnum)] = {kind: 'home', path: ''}
   add(view.lines, '')
 enddef
 
@@ -162,9 +171,9 @@ def AddWorkingFileEntry(
   var icon_width = strlen(icon_text)
   text ..= icon_text
   if icon_width > 0
-    var icon_group = IconHighlightGroup(
+    var icon_group = icons.HighlightGroup(
       get(icon, 'color', ''),
-      get(IconHighlightGroups, get(icon, 'kind', 'file'), 'V9FilerIconFile')
+      get(icons.KindFallbackGroup, get(icon, 'kind', 'file'), 'V9FilerIconFile')
     )
     if !has_key(view.highlight_positions.icons, icon_group)
       view.highlight_positions.icons[icon_group] = []
@@ -221,7 +230,7 @@ def AddWorkingFileEntry(
   endif
 
   add(view.lines, text)
-  view.line_index[string(lnum)] = {path: path, is_working: true}
+  view.line_index[string(lnum)] = {kind: 'working', path: path}
 enddef
 
 def ParentDisplay(parent: string, root: string): string
@@ -334,9 +343,9 @@ def AddEntry(
   var icon_width = strlen(icon_text)
   text ..= icon_text
   if icon_width > 0
-    var icon_group = IconHighlightGroup(
+    var icon_group = icons.HighlightGroup(
       get(icon, 'color', ''),
-      get(IconHighlightGroups, get(icon, 'kind', 'file'), 'V9FilerIconFile')
+      get(icons.KindFallbackGroup, get(icon, 'kind', 'file'), 'V9FilerIconFile')
     )
     if !has_key(view.highlight_positions.icons, icon_group)
       view.highlight_positions.icons[icon_group] = []
@@ -400,7 +409,7 @@ def AddEntry(
 
   # apply built text and highlights to view
   add(view.lines, text)
-  view.line_index[string(lnum)] = {path: entry.path, is_working: false}
+  view.line_index[string(lnum)] = {kind: 'tree', path: entry.path}
   view.entry_count += 1
 enddef
 
@@ -432,6 +441,7 @@ def ApplyHighlights(view: dict<any>): void
   AddMatch('V9FilerEmpty', positions.empty_lines, 10)
   AddMatch('V9FilerWorkingFilesHeader', positions.working_files_header, 10)
   AddMatch('V9FilerWorkingFilesPath', positions.working_files_paths, 10)
+  AddMatch('V9FilerHomeMenu', positions.home_menu, 10)
 enddef
 
 def EnsureHighlightGroups(): void
@@ -454,16 +464,7 @@ def EnsureHighlightGroups(): void
   highlight default link V9FilerEmpty Comment
   highlight default link V9FilerWorkingFilesHeader Title
   highlight default link V9FilerWorkingFilesPath Comment
-enddef
-
-def IconHighlightGroup(color: string, fallback: string): string
-  if !icons.IsIconColor(color)
-    return fallback
-  endif
-
-  var group = 'V9FilerIconColor' .. tolower(strpart(color, 1))
-  execute 'highlight ' .. group .. ' guifg=' .. color
-  return group
+  highlight default link V9FilerHomeMenu Title
 enddef
 
 def GitStatusLabel(kind: string): string

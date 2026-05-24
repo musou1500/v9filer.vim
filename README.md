@@ -13,6 +13,7 @@ It shows a directory tree for the current or selected directory, and lets you na
 - File creation, rename, delete, and path yank actions
 - Hidden file visibility toggle
 - Reveal the current file in the sidebar
+- Home dashboard with branch, diff totals, per-file changes, and TODO list
 - Optional Nerd Font icons and colored highlights
 
 ## Requirements
@@ -69,7 +70,14 @@ Reveal the current file in the sidebar:
 :V9FilerReveal
 ```
 
-`:Filer` is an alias for `:V9Filer`.
+Open the Home dashboard (branch, diff totals, changed files, TODO list):
+
+```vim
+:V9FilerHome
+```
+
+`:Filer` is an alias for `:V9Filer`. See `:help v9filer-home` for the full
+description of the Home buffer's content and mappings.
 
 ## Default Mappings
 
@@ -100,6 +108,20 @@ Main filer buffer mappings:
 | `?` | Toggle quick help |
 | `q` | Close the filer |
 
+## `<Plug>` Mappings
+
+Every action is exposed as a `<Plug>` mapping so you can rebind without
+relying on the default keys. The global defaults above and the buffer-local
+mappings in the sidebar and Home buffers all delegate to these. See
+`:help v9filer-plug` for the full list.
+
+```vim
+let g:v9filer_no_default_mappings = true
+nmap <silent> <F3> <Plug>(V9FilerToggle)
+nmap <silent> <F4> <Plug>(V9FilerReveal)
+nmap <silent> gh   <Plug>(V9FilerOpenHome)
+```
+
 ## Configuration
 
 Example:
@@ -122,6 +144,9 @@ let g:v9filer_nerd_font_icons = true
 
 " Do not define default global mappings
 let g:v9filer_no_default_mappings = true
+
+" Open the sidebar and Home automatically on argument-less Vim startup
+let g:v9filer_open_home_on_startup = true
 ```
 
 You can add custom Nerd Font icon rules.

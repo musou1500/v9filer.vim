@@ -5,8 +5,14 @@ import './tab_state.vim' as tab_state
 import './fs.vim' as fs
 import './render.vim' as render
 import './working_files.vim' as working_files
+import './target_window.vim' as target_window
+import './home.vim' as home
 
 export def OpenOrExpand(): void
+  if buf_state.IsHomeLine(line('.'))
+    home.Open('edit')
+    return
+  endif
   var path = PathUnderCursor()
   if empty(path)
     return
@@ -173,6 +179,10 @@ export def RemoveWorkingFile(): void
 enddef
 
 def OpenPath(kind: string): void
+  if buf_state.IsHomeLine(line('.'))
+    home.Open(kind)
+    return
+  endif
   var path = PathUnderCursor()
   if empty(path)
     return
@@ -197,7 +207,7 @@ def ChangeRoot(path: string): void
 enddef
 
 def OpenFile(path: string, kind: string): void
-  MoveToTargetWindow()
+  target_window.MoveTo()
 
   if kind ==# 'vertical'
     execute 'vertical split ' .. fnameescape(path)
@@ -206,25 +216,6 @@ def OpenFile(path: string, kind: string): void
   else
     execute 'edit ' .. fnameescape(path)
   endif
-enddef
-
-def MoveToTargetWindow(): void
-  var filer_win = win_getid()
-  var target_win = tab_state.LastFocusWinid()
-
-  if target_win > 0 && target_win != filer_win && !IsFilerWindow(target_win)
-    if win_gotoid(target_win)
-      return
-    endif
-  endif
-
-  win_gotoid(filer_win)
-  rightbelow vertical new
-enddef
-
-def IsFilerWindow(winid: number): bool
-  var win = win_id2win(winid)
-  return win > 0 && !empty(getbufvar(winbufnr(win), 'v9filer_state', {}))
 enddef
 
 def PathUnderCursor(): string

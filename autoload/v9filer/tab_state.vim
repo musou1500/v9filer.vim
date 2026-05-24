@@ -32,6 +32,13 @@ vim9script
 #                              separate from the UI state above because
 #                              tracking starts on any normal-file BufWinEnter
 #                              (even before :V9Filer is invoked in this tab).
+# t:v9filer_home_buf         — buffer number of the active Home scratch buffer
+#                              in this tab (-1 / unset when not open). Like
+#                              t:v9filer_buf, this is bookkeeping for the
+#                              ephemeral buffer (bufhidden=wipe).
+# t:v9filer_home_id          — monotonically increasing id for the Home buffer
+#                              name (`v9filer home #<id>`). Shares the global
+#                              counter with t:v9filer_id so names never collide.
 
 var next_id: number = 1
 
@@ -153,4 +160,28 @@ enddef
 
 export def SetWorkingFiles(files: list<string>): void
   t:v9filer_working_files = files
+enddef
+
+export def HomeBuf(): number
+  return get(t:, 'v9filer_home_buf', -1)
+enddef
+
+export def SetHomeBuf(bufnr: number): void
+  t:v9filer_home_buf = bufnr
+enddef
+
+export def UnsetHomeBuf(): void
+  unlet! t:v9filer_home_buf
+enddef
+
+export def HomeId(): number
+  return get(t:, 'v9filer_home_id', 0)
+enddef
+
+export def AllocateHomeId(): number
+  if !exists('t:v9filer_home_id')
+    t:v9filer_home_id = next_id
+    next_id += 1
+  endif
+  return t:v9filer_home_id
 enddef

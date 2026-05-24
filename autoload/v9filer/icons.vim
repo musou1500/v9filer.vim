@@ -44,6 +44,15 @@ const NerdFontTypeFallbacks: dict<dict<string>> = {
 const EmptyIcon: dict<string> = {text: '', color: '', kind: ''}
 const BoolConditionKeys: list<string> = ['is_dir', 'is_executable']
 
+# Highlight group fallbacks by entry kind. Callers pass one of these (or their
+# own fallback) into HighlightGroup() so an icon without a per-rule `color`
+# still gets a sensible default.
+export const KindFallbackGroup: dict<string> = {
+  directory: 'V9FilerIconDirectory',
+  executable: 'V9FilerIconExecutable',
+  file: 'V9FilerIconFile',
+}
+
 export def Resolve(entry: dict<any>): dict<string>
   if !IconsEnabled()
     return EmptyIcon
@@ -66,6 +75,20 @@ enddef
 
 export def IsIconColor(color: string): bool
   return color =~# '^#[0-9A-Fa-f]\{6}$'
+enddef
+
+# Resolve a per-icon highlight group. If `color` is a valid hex string,
+# defines (idempotently) a group `V9FilerIconColor<hex>` with that guifg and
+# returns it. Otherwise returns `fallback`. Side-effecting `:highlight` is
+# intentional and matches how the sidebar render pipeline handles per-rule
+# icon colors.
+export def HighlightGroup(color: string, fallback: string): string
+  if !IsIconColor(color)
+    return fallback
+  endif
+  var group = 'V9FilerIconColor' .. tolower(strpart(color, 1))
+  execute 'highlight ' .. group .. ' guifg=' .. color
+  return group
 enddef
 
 export def IconsEnabled(): bool
